@@ -14,7 +14,7 @@
   "mixins": [{ "config": "quartz.client.mixins.json", "environment": "client" }],
   "depends": {
     "fabricloader": ">=0.20.1",
-    "minecraft": "~1.21.11",
+    "minecraft": "${minecraftVersion}",
     "java": ">=21",
     "fabric-api": "*"
   }

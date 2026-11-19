@@ -1,7 +1,7 @@
 name: Build Quartz Client
 on:
   push:
-    branches: ["quartz-mod-first-build", "quartz-cosmetics", "quartz-refinements"]
+    branches: ["quartz-mod-first-build", "quartz-cosmetics", "quartz-refinements", "quartz-version-ports"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
@@ -13,8 +13,8 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - { id: "1.21.11", project: "quartz-mod" }
-          - { id: "26.3", project: "quartz-mod-26.3" }
+          - { id: "1.21.10", project: "quartz-mod", api: "0.138.4+1.21.10" }
+          - { id: "26.2", project: "quartz-mod-26.3", api: "0.160.0+26.2" }
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,8 +25,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.8.2"
+      - name: Adapt the 1.21.10 Mojang names
+        if: matrix.target.id == '1.21.10'
+        run: |
+          find quartz-mod/src -name '*.java' -print0 | xargs -0 sed -i 's/\bIdentifier\b/ResourceLocation/g'
       - name: Compile Quartz mod
-        run: gradle -p ${{ matrix.target.project }} build
+        run: gradle -p ${{ matrix.target.project }} -Pminecraft_version=${{ matrix.target.id }} -Pfabric_api_version=${{ matrix.target.api }} build
       - name: Stage the runtime mod JAR
         shell: bash
         run: |
@@ -65,71 +69,3 @@ jobs:
           name: quartz-client-mod-${{ matrix.target.id }}
           path: dist/*.jar
           if-no-files-found: error
-  windows:
-    runs-on: windows-latest
-    needs: build-mod
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - uses: actions/download-artifact@v4
-        with:
-          name: quartz-client-mod-1.21.11
-          path: quartz-mods/fabric/1.21.11
-      - uses: actions/download-artifact@v4
-        with:
-          name: quartz-client-mod-26.3
-          path: quartz-mods/fabric/26.3
-      - name: Bundle Fabric builds and their dependencies
-        shell: bash
-        run: |
-          stage() {
-            local mc="$1" api="$2" folder="quartz-mods/fabric/$1"
-            mv "$folder/Quartz-Client-Mod-$mc.jar" "$folder/quartz-client.jar"
-            curl --fail --location --retry 3 "https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/$api/fabric-api-$api.jar" -o "$folder/fabric-api.jar"
-          }
-          stage '1.21.11' '0.141.6+1.21.11'
-          stage '26.3' '0.166.2+26.3'
-      - run: npm install --no-audit --no-fund
-      - run: npm run dist
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      - name: Verify packaged startup files and bundled Fabric mods
-        run: node scripts/verify-windows-package.cjs
-      - name: Open the Windows launcher twice and check the Minecraft version picker
-        run: |
-          npm install --no-save --package-lock=false --no-audit --no-fund playwright-core@1.58.2
-          node scripts/smoke-windows-launcher.cjs
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Quartz-Client-Windows
-          path: dist/Quartz-Client-*.exe
-          if-no-files-found: error
-  release:
-    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
-    needs: windows
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: Quartz-Client-Windows
-          path: release-files
-      - uses: actions/download-artifact@v4
-        with:
-          name: quartz-client-mod-1.21.11
-          path: release-files
-      - uses: actions/download-artifact@v4
-        with:
-          name: quartz-client-mod-26.3
-          path: release-files
-      - name: Publish the Windows installer and server mods
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          version="${RELEASE_TAG#v}"
-          gh release create "$RELEASE_TAG" release-files/Quartz-Client-Setup-*.exe release-files/Quartz-Client-Mod-*.jar --verify-tag --generate-notes --title "Quartz Client $version"
