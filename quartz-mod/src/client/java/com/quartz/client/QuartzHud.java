@@ -327,6 +327,7 @@ final class QuartzHud {
             int top = y + 3 + (settings.armorHorizontal ? 0 : i * ARMOR_SLOT);
             if (cell.icon() != null) g.blitSprite(RenderPipelines.GUI_TEXTURED, cell.icon(), left, top, 16, 16);
             else g.renderItem(cell.item(), left, top);
+            if (!settings.showValue) durabilityBar(g, cell.item(), left, top);
             if (settings.showValue && (settings.fg >>> 24) >= 4 && !cell.value().isEmpty()) {
                 var pose = g.pose();
                 pose.pushMatrix();
@@ -338,6 +339,20 @@ final class QuartzHud {
                 }
             }
         }
+    }
+
+    private static void durabilityBar(GuiGraphics g, ItemStack item, int x, int y) {
+        int max = item.getMaxDamage();
+        int damage = item.getDamageValue();
+        if (max <= 0 || damage <= 0) return;
+        int remaining = Math.max(0, max - damage);
+        int barWidth = Math.max(0, Math.min(13, Math.round(13.0f * remaining / max)));
+        float ratio = remaining / (float) max;
+        int red = Math.round(255 * (1.0f - ratio));
+        int green = Math.round(255 * ratio);
+        int color = 0xFF000000 | (red << 16) | (green << 8);
+        g.fill(x + 2, y + 13, x + 15, y + 15, 0xFF000000);
+        if (barWidth > 0) g.fill(x + 2, y + 13, x + 2 + barWidth, y + 14, color);
     }
 
     private static void armorHotbar(GuiGraphics g, int x, int y, boolean horizontal) {
