@@ -15,7 +15,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: versions
-        run: echo "matrix=$(jq -c . src/quartz-build-targets.json)" >> "$GITHUB_OUTPUT"
+        run: |
+          python3 scripts/generate-quartz-targets.py
+          echo "matrix=$(jq -c . src/quartz-build-targets.json)" >> "$GITHUB_OUTPUT"
   build-mod:
     needs: targets
     strategy:
