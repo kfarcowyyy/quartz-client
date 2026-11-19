@@ -186,18 +186,122 @@ def prepare_older_texture_constructor(root):
         ])
 
 
+def prepare_entity_based_player_rendering(root):
+    client = root / "src/client/java/com/quartz/client"
+    for file in (root / "src").rglob("*.java"):
+        replace_in(file, [
+            ("net.minecraft.client.renderer.entity.state.PlayerRenderState", "net.minecraft.client.player.AbstractClientPlayer"),
+            ("net/minecraft/client/renderer/entity/state/PlayerRenderState", "net/minecraft/client/player/AbstractClientPlayer"),
+            ("PlayerRenderState", "AbstractClientPlayer"),
+            ("state.id", "state.getId()"),
+            ("RenderType::guiTextured, ", ""),
+        ])
+    replace_in(client / "QuartzStyleLayer.java", [
+        ("RenderLayer<AbstractClientPlayer, PlayerModel>", "RenderLayer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>>"),
+        ("RenderLayerParent<AbstractClientPlayer, PlayerModel>", "RenderLayerParent<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>>"),
+        ("AbstractClientPlayer state, float yaw, float pitch)", "AbstractClientPlayer state, float swing, float swingAmount, float delta, float age, float yaw, float pitch)"),
+        ("state.isInvisible || state.isSpectator", "state.isInvisible() || state.isSpectator()"),
+        ("        model.setupAnim(state);\n", ""),
+        ("                model.root().translateAndRotate(pose);\n", ""),
+        ("    float age = state.ageInTicks;", ""),
+        ("bone(PlayerModel model", "bone(PlayerModel<?> model"),
+    ])
+    replace_in(client / "mixin/QuartzCapeMixin.java", [
+        ("AbstractClientPlayer;FF)V", "AbstractClientPlayer;FFFFFF)V"),
+        ("AbstractClientPlayer state, float yaw, float pitch,",
+         "AbstractClientPlayer state, float swing, float amount, float delta, float age, float yaw, float pitch,"),
+    ])
+    replace_in(client / "mixin/QuartzPlayerModelMixin.java", [
+        ("import org.spongepowered.asm.mixin.Mixin;", "import net.minecraft.world.entity.LivingEntity;\nimport org.spongepowered.asm.mixin.Mixin;"),
+        ("setupAnim(Lnet/minecraft/client/player/AbstractClientPlayer;)V", "setupAnim(Lnet/minecraft/world/entity/LivingEntity;FFFFF)V"),
+        ("quartz$stylePose(AbstractClientPlayer state, CallbackInfo info)", "quartz$stylePose(LivingEntity entity, float swing, float amount, float age, float yaw, float pitch, CallbackInfo info)"),
+        ("QuartzMotion.apply((PlayerModel) (Object) this, state);",
+         "if (entity instanceof AbstractClientPlayer player) QuartzMotion.apply((PlayerModel<?>) (Object) this, player);"),
+    ])
+    replace_in(client / "mixin/QuartzAvatarLayerMixin.java", [
+        ("import com.quartz.client.QuartzStyleLayer;", """import com.mojang.blaze3d.vertex.PoseStack;
+import com.quartz.client.QuartzMotion;
+import com.quartz.client.QuartzStyleLayer;
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import net.minecraft.client.renderer.MultiBufferSource;"""),
+        ("RenderLayerParent<AbstractClientPlayer, PlayerModel>", "RenderLayerParent<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>>"),
+    ])
+    file = client / "mixin/QuartzAvatarLayerMixin.java"
+    source = file.read_text(encoding="utf-8").rstrip()
+    file.write_text(source[:-1] + '''
+    @WrapMethod(method = "render(Lnet/minecraft/client/player/AbstractClientPlayer;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V")
+    private void quartz$moveEmotePose(AbstractClientPlayer player, float yaw, float delta, PoseStack pose,
+                                     MultiBufferSource buffers, int light, Operation<Void> original) {
+        float offset = QuartzMotion.bodyOffset(player);
+        if (offset == 0f) {
+            original.call(player, yaw, delta, pose, buffers, light);
+            return;
+        }
+        pose.pushPose();
+        try {
+            pose.translate(0, -offset / 16f, 0);
+            original.call(player, yaw, delta, pose, buffers, light);
+        } finally {
+            pose.popPose();
+        }
+    }
+}
+''', encoding="utf-8")
+    file = client / "QuartzMotion.java"
+    source = file.read_text(encoding="utf-8").replace("PlayerModel p,", "PlayerModel<?> p,")
+    source = re.sub(r"(?m)^\s*p\.root\(\)\.y [^\n]*\n", "\n", source)
+    pos = source.index("    public static void apply")
+    source = source[:pos] + '''    public static float bodyOffset(AbstractClientPlayer player) {
+        int id = player.getId();
+        Play remote = REMOTE.get(id);
+        boolean local = QuartzStyle.local(id) && id == avatar;
+        QuartzStyle.Emote emote = local ? active : remote == null ? null : remote.emote();
+        if (emote == null) return 0f;
+        float seconds = local ? (float) elapsed() : (System.nanoTime() - remote.when()) / 1_000_000_000f;
+        float duration = (float) emote.seconds();
+        float t = seconds / duration;
+        if (t >= 1f) return 0f;
+        float mix = smooth(seconds / .30f) * smooth((duration - seconds) / .43f);
+        return switch (emote.id()) {
+            case "happy" -> -2.4f * (1f - (float) Math.cos(seconds * 11f)) * mix;
+            case "greedy" -> {
+                float stride = (float) Math.sin(seconds * 11.5f);
+                yield -1.6f * stride * stride * mix;
+            }
+            case "zombie_rise" -> 21f * (1f - smooth((t - .16f) / .49f)) * smooth(t / .16f);
+            case "boo" -> {
+                float lift = 0f;
+                for (int i = 1; i < BOO.length; i++) {
+                    BooPose from = BOO[i - 1], to = BOO[i];
+                    if (t > to.t()) continue;
+                    lift = blend(from.lift(), to.lift(), smooth((t - from.t()) / (to.t() - from.t())));
+                    break;
+                }
+                yield lift * mix;
+            }
+            default -> 0f;
+        };
+    }
+
+''' + source[pos:]
+    file.write_text(source, encoding="utf-8")
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("version")
 parser.add_argument("project", type=Path)
 args = parser.parse_args()
-if args.version in {"1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.8", "1.21.9", "1.21.10"}:
+if args.version in {"1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.8", "1.21.9", "1.21.10"}:
     prepare_remapped(args.project)
-    if args.version in {"1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.8"}:
+    if args.version in {"1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.8"}:
         prepare_pre_submit(args.project)
-    if args.version in {"1.21.2", "1.21.3", "1.21.4", "1.21.5"}:
+    if args.version in {"1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5"}:
         prepare_pre_pipeline(args.project)
-    if args.version in {"1.21.2", "1.21.3", "1.21.4"}:
+    if args.version in {"1.21.1", "1.21.2", "1.21.3", "1.21.4"}:
         prepare_older_texture_constructor(args.project)
+    if args.version == "1.21.1":
+        prepare_entity_based_player_rendering(args.project)
 elif args.version in {"26.1", "26.1.1", "26.1.2", "26.2"}:
     prepare_named(args.project)
     if args.version.startswith("26.1"):

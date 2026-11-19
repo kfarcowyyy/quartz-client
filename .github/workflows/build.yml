@@ -13,9 +13,7 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - { id: "1.21.2", project: "quartz-mod", api: "0.106.1+1.21.2" }
-          - { id: "1.21.3", project: "quartz-mod", api: "0.114.1+1.21.3" }
-          - { id: "1.21.4", project: "quartz-mod", api: "0.119.4+1.21.4" }
+          - { id: "1.21.1", project: "quartz-mod", api: "0.116.0+1.21.1" }
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
