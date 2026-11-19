@@ -8,13 +8,20 @@ on:
 permissions:
   contents: read
 jobs:
+  targets:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.versions.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: versions
+        run: echo "matrix=$(jq -c . src/quartz-build-targets.json)" >> "$GITHUB_OUTPUT"
   build-mod:
+    needs: targets
     strategy:
       fail-fast: false
       matrix:
-        target:
-          - { id: "1.21.11", project: "quartz-mod" }
-          - { id: "26.3", project: "quartz-mod-26.3" }
+        target: ${{ fromJSON(needs.targets.outputs.matrix) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,8 +32,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.8.2"
+      - name: Prepare matching Java sources
+        if: matrix.target.port
+        run: python3 scripts/prepare-quartz-port.py ${{ matrix.target.id }} ${{ matrix.target.project }}
       - name: Compile Quartz mod
-        run: gradle -p ${{ matrix.target.project }} build
+        run: gradle -p ${{ matrix.target.project }} -Pminecraft_version=${{ matrix.target.id }} -Pfabric_api_version=${{ matrix.target.api }} build
       - name: Stage the runtime mod JAR
         shell: bash
         run: |
@@ -60,6 +70,27 @@ jobs:
           grep -Fx 'fabric.mod.json' dist/jar-entries.txt
           cp "$jar" "dist/Quartz-Client-Mod-${{ matrix.target.id }}.jar"
           ls -lh dist
+      - name: Launch Minecraft to its main menu
+        if: matrix.target.port
+        shell: bash
+        run: |
+          log="$RUNNER_TEMP/quartz-launch.log"
+          setsid xvfb-run -a gradle -p ${{ matrix.target.project }} -Pminecraft_version=${{ matrix.target.id }} -Pfabric_api_version=${{ matrix.target.api }} runClient > "$log" 2>&1 &
+          game=$!
+          trap 'kill -TERM -- "-$game" 2>/dev/null || true' EXIT
+          for i in {1..76}; do
+            if grep -q 'Created: .*minecraft:textures/atlas/gui.png-atlas' "$log"; then
+              sleep 5
+              if kill -0 "$game" 2>/dev/null && ! grep -qiE 'Game crashed|MixinApplyError|Critical injection failure' "$log"; then
+                echo "Minecraft ${{ matrix.target.id }} reached the main menu"
+                exit 0
+              fi
+            fi
+            kill -0 "$game" 2>/dev/null || break
+            sleep 3
+          done
+          tail -245 "$log"
+          exit 1
       - uses: actions/upload-artifact@v4
         with:
           name: quartz-client-mod-${{ matrix.target.id }}
@@ -75,22 +106,18 @@ jobs:
           node-version: "22"
       - uses: actions/download-artifact@v4
         with:
-          name: quartz-client-mod-1.21.11
-          path: quartz-mods/fabric/1.21.11
-      - uses: actions/download-artifact@v4
-        with:
-          name: quartz-client-mod-26.3
-          path: quartz-mods/fabric/26.3
+          pattern: quartz-client-mod-*
+          path: downloaded-mods
       - name: Bundle Fabric builds and their dependencies
         shell: bash
         run: |
-          stage() {
-            local mc="$1" api="$2" folder="quartz-mods/fabric/$1"
-            mv "$folder/Quartz-Client-Mod-$mc.jar" "$folder/quartz-client.jar"
+          node -p "require('./src/quartz-build-targets.json').map(({id,api}) => id+' '+api).join('\n')" |
+          while read -r mc api; do
+            folder="quartz-mods/fabric/$mc"
+            mkdir -p "$folder"
+            mv "downloaded-mods/quartz-client-mod-$mc/Quartz-Client-Mod-$mc.jar" "$folder/quartz-client.jar"
             curl --fail --location --retry 3 "https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/$api/fabric-api-$api.jar" -o "$folder/fabric-api.jar"
-          }
-          stage '1.21.11' '0.141.6+1.21.11'
-          stage '26.3' '0.166.2+26.3'
+          done
       - run: npm install --no-audit --no-fund
       - run: npm run dist
         env:
@@ -119,12 +146,9 @@ jobs:
           path: release-files
       - uses: actions/download-artifact@v4
         with:
-          name: quartz-client-mod-1.21.11
+          pattern: quartz-client-mod-*
           path: release-files
-      - uses: actions/download-artifact@v4
-        with:
-          name: quartz-client-mod-26.3
-          path: release-files
+          merge-multiple: true
       - name: Publish the Windows installer and server mods
         env:
           GH_TOKEN: ${{ github.token }}

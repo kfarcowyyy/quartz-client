@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { mkdtemp } = require('node:fs/promises');
+const { mkdtemp, mkdir, writeFile } = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { _electron } = require('playwright-core');
@@ -60,14 +60,10 @@ async function boot(profile) {
       return state.account;
     });
     const skinId = '00000000000000000000000000000000-wide';
-    await app.evaluate(({ app, nativeImage }, { account, skinId }) => {
-      const fs = require('node:fs'), path = require('node:path');
-      const folder = path.join(app.getPath('userData'), 'wardrobe', account.uuid.replaceAll('-', '') + '-skins');
-      fs.mkdirSync(folder, { recursive: true });
-      const data = Buffer.alloc(64 * 64 * 4, 255);
-      for (let pos = 0; pos < data.length; pos += 4) data[pos + 1] = (pos / 16) % 255;
-      fs.writeFileSync(path.join(folder, skinId + '.png'), nativeImage.createFromBitmap(data, { width: 64, height: 64 }).toPNG());
-    }, { account, skinId });
+    const userData = await app.evaluate(({ app }) => app.getPath('userData'));
+    const folder = path.join(userData, 'wardrobe', account.uuid.replaceAll('-', '') + '-skins');
+    await mkdir(folder, { recursive: true });
+    await writeFile(path.join(folder, skinId + '.png'), Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAmUlEQVR4nO3QQQ0AIBDAMMSgFOOHjJKwx/7N1uwzP7c0QNcADdA1QAN0DdAAXQM0QNcADdA1QAN0DdAAXQM0QNcADdA1QAN0DdAAXQM0QNcADdA1QAN0DdAAXQM0QNcADdA1QAN0DdAAXQM0QNcADdA1QAN0DdAAXQM0QNcADdA1QAN0DdAAXQM0QNcADdA1QAN0DZgHEHLABdvsQndxUgn6AAAAAElFTkSuQmCC', 'base64'));
     await window.locator('#nav [data-page="cosmetics"]').click();
     await window.locator('[data-wardrobe-tab="skins"]').click();
     await window.locator('[data-wardrobe-preview]').first().click();

@@ -50,11 +50,12 @@ function bindWardrobe() {
             const ang = Math.PI * i / 4;
             return `<label class="wardrobe-wheel-slot" style="--dx:${Math.sin(ang)};--dy:${-Math.cos(ang)}">
               <span>${i + 1} · ${esc(here ? wardrobeCopy(here.en, here.pl) : wardrobeCopy('Empty', 'Puste'))}</span>
-              <select data-emote-slot="${i}" ${busy ? 'disabled' : ''} aria-label="${wardrobeCopy('Emote slot', 'Slot emotki')} ${i + 1}">
+              <select id="wardrobe-emote-${i}" data-emote-slot="${i}" ${busy ? 'disabled' : ''} aria-label="${wardrobeCopy('Emote slot', 'Slot emotki')} ${i + 1}">
                 <option value="">${wardrobeCopy('Empty', 'Puste')}</option>
                 ${style.emotes.map(emote => `<option value="${esc(emote.id)}" ${emote.id === id ? 'selected' : ''}>${esc(wardrobeCopy(emote.en, emote.pl))}</option>`).join('')}
               </select></label>`;
           }).join('')}<span class="wardrobe-wheel-title">Quartz <kbd>P</kbd></span></div>`;
+        for (const choice of panel.querySelectorAll('[data-emote-slot]')) addQuartzPicker(choice);
       }
       return;
     }
@@ -64,7 +65,7 @@ function bindWardrobe() {
         return;
       }
       if (!capes) { panel.textContent = wardrobeCopy('Loading capes…', 'Wczytywanie peleryn…'); return; }
-      paintCollection(capes.filter(cape => cape.id), true);
+      paintCollection(capes.map((cape, index) => ({ ...cape, previewOnly: !cape.id, id: cape.id || 'cache-' + index })), true);
       return;
     }
     if (!skins) { panel.textContent = wardrobeCopy('Loading skins…', 'Wczytuję skiny…'); return; }
@@ -98,7 +99,7 @@ function bindWardrobe() {
       <small>${wardrobeCopy('Drag to rotate', 'Przeciągnij, aby obrócić')}</small>
       <div class="wardrobe-item-actions">
         <button class="btn primary" data-wardrobe-action="${isCape ? 'cape' : 'equip'}" data-skin="${esc(selected.id)}"
-          ${busy || worn(selected) ? 'disabled' : ''}>${worn(selected) ? wardrobeCopy('Equipped', 'Założony') : wardrobeCopy('Equip', 'Załóż')}</button>
+          ${busy || worn(selected) || selected.previewOnly ? 'disabled' : ''}>${worn(selected) ? wardrobeCopy('Equipped', 'Założony') : wardrobeCopy('Equip', 'Załóż')}</button>
         ${isCape ? '' : `<button class="btn danger" data-wardrobe-action="remove" data-skin="${esc(selected.id)}" ${disabled}>${wardrobeCopy('Remove', 'Usuń')}</button>`}
       </div></aside>` : '';
     panel.innerHTML = heading + `<div class="wardrobe-collection ${selected ? 'with-preview' : ''}">${shelf}${detail}</div>`;

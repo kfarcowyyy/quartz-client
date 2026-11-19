@@ -578,6 +578,7 @@ function bindSettings() {
   $('#s-cf').addEventListener('change', (e) => save({ curseforgeKey: e.target.value.trim() }));
   $('#s-java').addEventListener('change', (e) => save({ javaPath: e.target.value.trim() }));
   $('#s-lang').value = state.settings.language || 'en';
+  addQuartzPicker($('#s-lang'));
   $('#s-lang').addEventListener('change', async (e) => {
     try {
       await save({ language: e.target.value });

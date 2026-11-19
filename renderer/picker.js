@@ -3,6 +3,7 @@ function addQuartzPicker(select) {
   const trigger = document.createElement('button');
   const popup = document.createElement('div');
   root.className = 'quartz-picker';
+  if (select.classList.contains('grow')) root.classList.add('grow');
   trigger.type = 'button';
   trigger.className = 'quartz-picker-trigger';
   trigger.setAttribute('aria-haspopup', 'listbox');
@@ -13,6 +14,7 @@ function addQuartzPicker(select) {
   popup.setAttribute('popover', 'auto');
   popup.setAttribute('role', 'listbox');
   trigger.setAttribute('aria-controls', popup.id);
+  popup.setAttribute('aria-label', trigger.getAttribute('aria-label'));
   select.before(root);
   select.hidden = true;
   root.append(select, trigger, popup);

@@ -22,6 +22,13 @@ function drawAccountHead(canvas, texture) {
       drawing.fillStyle = face.color;
     }
     drawing.fillRect(0, 0, 8, 8);
+    if (!texture && u === 8 && v === 8) {
+      drawing.fillStyle = '#e7d7f4';
+      drawing.fillRect(1, 3, 2, 1);
+      drawing.fillRect(5, 3, 2, 1);
+      drawing.fillStyle = '#634683';
+      drawing.fillRect(3, 5, 2, 1);
+    }
   }
   drawing.resetTransform();
 }

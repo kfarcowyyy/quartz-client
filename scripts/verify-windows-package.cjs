@@ -78,7 +78,10 @@ try {
   if (metadata) checkModule(JSON.parse(readText('package.json', metadata)).main);
   checkModule('src/preload.js');
 
-  for (const version of ['1.21.11', '26.3']) {
+  for (const script of ['renderer/account-head.js', 'renderer/skin-preview.js', 'renderer/picker.js']) checkFile(script);
+  const targetFile = checkFile('src/quartz-build-targets.json');
+  const targets = targetFile ? JSON.parse(readText('src/quartz-build-targets.json', targetFile)) : [];
+  for (const { id: version } of targets) {
     for (const name of ['quartz-client.jar', 'fabric-api.jar']) {
       checkFile('quartz-mods/fabric/' + version + '/' + name);
     }
@@ -87,7 +90,7 @@ try {
   if (missing.size) {
     throw new Error('Missing files in the packaged app:\n' + [...missing].map(file => ' - ' + file).join('\n'));
   }
-  console.log('Checked startup modules and both bundled Fabric versions in ' + archivePath);
+  console.log('Checked startup modules and all bundled Fabric versions in ' + archivePath);
 } finally {
   fs.closeSync(read);
 }
