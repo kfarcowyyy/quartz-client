@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.lwjgl.glfw.GLFW;
 
 public final class QuartzModClient implements ClientModInitializer {
+    private static KeyMapping emoteWheel;
     private static KeyMapping openMenu, stopwatch;
 
     @Override
@@ -22,6 +23,10 @@ public final class QuartzModClient implements ClientModInitializer {
         openMenu = KeyBindingHelper.registerKeyBinding(new KeyMapping(
                 "key.quartz.open_menu", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_RIGHT_SHIFT,
                 KeyMapping.Category.MISC));
+        var quartzKeys = KeyMapping.Category.register(Identifier.fromNamespaceAndPath("quartz", "client"));
+        emoteWheel = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+                "key.quartz.emote_wheel", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_P, quartzKeys));
+        QuartzSocial.register();
         stopwatch = KeyBindingHelper.registerKeyBinding(new KeyMapping(
                 "Quartz · Stopwatch", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_K,
                 KeyMapping.Category.MISC));
@@ -31,6 +36,12 @@ public final class QuartzModClient implements ClientModInitializer {
             return net.minecraft.world.InteractionResult.PASS;
         });
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            QuartzStyle.tick();
+            QuartzMotion.tick(client);
+            QuartzSocial.tick(client);
+            while (emoteWheel.consumeClick()) {
+                if (client.player != null && client.screen == null) client.setScreen(new QuartzEmoteWheel(emoteWheel));
+            }
             QuartzTitleScreen.replaceVanilla(client);
             QuartzWardrobe.tick();
             QuartzHud.tick(client);

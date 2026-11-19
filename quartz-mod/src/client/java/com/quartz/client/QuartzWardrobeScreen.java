@@ -10,18 +10,22 @@ import java.nio.file.Path;
 import java.util.List;
 
 public final class QuartzWardrobeScreen extends QuartzSafeScreen {
-    private enum Tab { SKINS, CAPES, COSMETICS }
+    private enum Tab { SKINS, CAPES, COSMETICS, EMOTES }
     private final Screen parent;
     private Tab tab = Tab.SKINS;
     private boolean slim;
+    private int editing = -1;
     private int left, top, span, page, pages, limit;
     private List<QuartzWardrobe.Skin> skins = List.of();
     private List<QuartzWardrobe.Cape> capes = List.of();
     private Component notice;
 
-    public QuartzWardrobeScreen(Screen parent) {
+    public QuartzWardrobeScreen(Screen parent) { this(parent, false); }
+
+    QuartzWardrobeScreen(Screen parent, boolean emotes) {
         super(QuartzText.of("Wardrobe", "Garderoba"));
         this.parent = parent;
+        if (emotes) tab = Tab.EMOTES;
     }
 
     @Override
@@ -29,13 +33,18 @@ public final class QuartzWardrobeScreen extends QuartzSafeScreen {
         span = Math.min(480, width - 24);
         left = (width - span) / 2;
         top = 12;
-        int tabWidth = (span - 12) / 3;
+        int tabWidth = (span - 18) / 4;
         tab(QuartzText.of("Skins", "Skiny"), left, tabWidth, Tab.SKINS);
         tab(QuartzText.of("Capes", "Peleryny"), left + tabWidth + 6, tabWidth, Tab.CAPES);
         tab(QuartzText.of("3D cosmetics", "Kosmetyki 3D"), left + (tabWidth + 6) * 2, tabWidth, Tab.COSMETICS);
+        tab(QuartzText.of("Emotes", "Emotki"), left + (tabWidth + 6) * 3, tabWidth, Tab.EMOTES);
         add(QuartzText.of("Back", "Wróć"), left + span - 63, height - 28, 63, 18, false, this::onClose);
         limit = Math.max(1, (height - 113) / 27);
-        if (tab == Tab.COSMETICS) return;
+        if (tab == Tab.COSMETICS || tab == Tab.EMOTES) {
+            QuartzStyle.refresh();
+            initStyle();
+            return;
+        }
         if (tab == Tab.SKINS) drawSkinControls();
         else capes = QuartzWardrobe.capes();
         int count = tab == Tab.SKINS ? skins.size() : capes.size();
@@ -55,6 +64,86 @@ public final class QuartzWardrobeScreen extends QuartzSafeScreen {
                     left + span - 126, y + 2, 66, 18, on, () -> change(() -> QuartzWardrobe.equip(skin.id()))).active = !on;
             add(QuartzText.of("Remove", "Usuń"), left + span - 53, y + 2, 47, 18, false,
                     () -> change(() -> QuartzWardrobe.delete(skin.id())));
+        }
+    }
+
+    private void initStyle() {
+        if (tab == Tab.EMOTES && editing >= 0) {
+            int gap = 7, unit = (span - gap) / 2;
+            List<QuartzStyle.Emote> choices = QuartzStyle.emotes();
+            for (int i = 0; i < choices.size(); i++) {
+                var emote = choices.get(i);
+                add(emote.label(), left + (i % 2) * (unit + gap), 76 + (i / 2) * 22, unit, 19,
+                        emote.equals(QuartzStyle.emote(editing)), () -> change(() -> {
+                            QuartzStyle.setEmote(editing, emote);
+                            editing = -1;
+                        }));
+            }
+            return;
+        }
+        limit = Math.max(1, (height - 110) / 31);
+        int count = tab == Tab.COSMETICS ? QuartzStyle.accessories().size() : 8;
+        pages = Math.max(1, (count + limit - 1) / limit);
+        page = Math.min(page, pages - 1);
+        int body = styleWidth();
+        for (int i = 0; i < limit && page * limit + i < count; i++) {
+            int index = page * limit + i, y = 66 + i * 31;
+            if (tab == Tab.COSMETICS) {
+                var item = QuartzStyle.accessories().get(index);
+                boolean active = QuartzStyle.equipped(item);
+                add(active ? QuartzText.of("Take off", "Zdejmij") : QuartzText.of("Equip", "Załóż"),
+                        left + body - 66, y + 6, 60, 17, active, () -> change(() -> QuartzStyle.toggle(item)));
+            } else {
+                var item = QuartzStyle.emote(index);
+                add(QuartzText.of("Change", "Zmień"), left + body - 109, y + 6, 50, 17, false,
+                        () -> { editing = index; rebuildWidgets(); });
+                add(QuartzText.of("Clear", "Wyczyść"), left + body - 53, y + 6, 48, 17, false,
+                        () -> change(() -> QuartzStyle.setEmote(index, null))).active = item != null;
+            }
+        }
+        if (pages > 1) {
+            add(Component.literal("‹"), left, height - 28, 23, 18, false, () -> { page--; rebuildWidgets(); }).active = page > 0;
+            add(Component.literal("›"), left + 52, height - 28, 23, 18, false, () -> { page++; rebuildWidgets(); }).active = page + 1 < pages;
+        }
+    }
+
+    private int styleWidth() {
+        return tab == Tab.COSMETICS && Minecraft.getInstance().player != null && span >= 300 ? span - 112 : span;
+    }
+
+    private void drawStyle(GuiGraphics g, int mx, int my) {
+        if (tab == Tab.EMOTES && editing >= 0) {
+            g.drawString(font, QuartzText.of("Choose an emote for slot " + (editing + 1),
+                    "Wybierz emotkę do slotu " + (editing + 1)), left, 60, QuartzTheme.ACCENT, false);
+            return;
+        }
+        int body = styleWidth(), count = tab == Tab.COSMETICS ? QuartzStyle.accessories().size() : 8;
+        if (tab == Tab.COSMETICS && body < span) {
+            int x = left + body + 8, y = 66, bottom = height - 38;
+            QuartzTheme.card(g, x, y, span - body - 8, bottom - y, QuartzTheme.WHITE, QuartzTheme.OUTLINE);
+            var player = Minecraft.getInstance().player;
+            if (player != null) net.minecraft.client.gui.screens.inventory.InventoryScreen.renderEntityInInventoryFollowsMouse(
+                    g, x + 3, y + 5, left + span - 3, bottom - 3, Math.max(14, Math.min(32, (bottom - y) / 3)), 0, mx, my, player);
+        }
+        var atlas = net.minecraft.resources.Identifier.fromNamespaceAndPath("quartz", "textures/wardrobe/style-previews.png");
+        for (int i = 0; i < limit && page * limit + i < count; i++) {
+            int index = page * limit + i, y = 66 + i * 31;
+            QuartzTheme.card(g, left, y, body, 28, QuartzTheme.WHITE, QuartzTheme.OUTLINE);
+            Component label;
+            int shift;
+            if (tab == Tab.COSMETICS) {
+                g.blit(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED, atlas, left + 4, y + 2,
+                        index * 64, 0, 24, 24, 64, 64, 384, 64);
+                label = QuartzStyle.accessories().get(index).label();
+                shift = 32;
+            } else {
+                var item = QuartzStyle.emote(index);
+                label = Component.empty().append((index + 1) + " · ").append(
+                        item == null ? QuartzText.of("Empty", "Puste") : item.label());
+                shift = 8;
+            }
+            int max = Math.max(0, body - shift - (tab == Tab.COSMETICS ? 72 : 114));
+            g.drawString(font, font.plainSubstrByWidth(label.getString(), max), left + shift, y + 10, QuartzTheme.INK, false);
         }
     }
 
@@ -79,7 +168,7 @@ public final class QuartzWardrobeScreen extends QuartzSafeScreen {
             notice = null;
             rebuildWidgets();
         } catch (IOException | RuntimeException error) {
-            notice = QuartzText.of("Could not update the skin.", "Nie udało się zmienić skina.");
+            notice = QuartzText.of("Could not save the wardrobe.", "Nie udało się zapisać garderoby.");
         }
     }
 
@@ -94,6 +183,7 @@ public final class QuartzWardrobeScreen extends QuartzSafeScreen {
     private void tab(Component label, int x, int size, Tab next) {
         add(label, x, 29, size, 21, tab == next, () -> {
             tab = next;
+            editing = -1;
             page = 0;
             notice = null;
             rebuildWidgets();
@@ -109,10 +199,9 @@ public final class QuartzWardrobeScreen extends QuartzSafeScreen {
     protected void drawQuartz(GuiGraphics g, int mouseX, int mouseY, float delta) {
         QuartzTheme.background(g, width, height);
         g.drawString(font, title, left, top + 3, QuartzTheme.ACCENT, false);
-        QuartzTheme.card(g, left, 82, span, Math.max(30, height - 120), QuartzTheme.WHITE, QuartzTheme.OUTLINE);
-        if (tab == Tab.COSMETICS) {
-            g.drawString(font, QuartzText.of("Your 3D cosmetics will appear here.", "Tu pojawią się Twoje kosmetyki 3D."),
-                    left + 9, 95, QuartzTheme.MUTED, false);
+        if (tab == Tab.SKINS || tab == Tab.CAPES) QuartzTheme.card(g, left, 82, span, Math.max(30, height - 120), QuartzTheme.WHITE, QuartzTheme.OUTLINE);
+        if (tab == Tab.COSMETICS || tab == Tab.EMOTES) {
+            drawStyle(g, mouseX, mouseY);
         } else if ((tab == Tab.SKINS && skins.isEmpty()) || (tab == Tab.CAPES && capes.isEmpty())) {
             Component empty = tab == Tab.SKINS
                     ? QuartzText.of("Drop a 64 × 64 PNG here to add a skin.", "Dodaj skina, upuszczając tutaj PNG 64 × 64.")
@@ -132,14 +221,19 @@ public final class QuartzWardrobeScreen extends QuartzSafeScreen {
                 }
             }
         }
-        if (pages > 1 && tab != Tab.COSMETICS) g.drawString(font, (page + 1) + "/" + pages, left + 27, height - 23, QuartzTheme.MUTED, false);
+        if (pages > 1) g.drawString(font, (page + 1) + "/" + pages, left + 27, height - 23, QuartzTheme.MUTED, false);
         if (notice != null) {
-            int x = left + ((pages > 1 && tab != Tab.COSMETICS) ? 80 : 0);
+            int x = left + ((pages > 1) ? 80 : 0);
             String text = font.plainSubstrByWidth(notice.getString(), Math.max(0, left + span - 69 - x));
             g.drawString(font, text, x, height - 23, QuartzTheme.ACCENT, false);
         }
         drawWidgets(g, mouseX, mouseY, delta);
     }
 
-    @Override public void onClose() { Minecraft.getInstance().setScreen(parent); }
+    @Override public void onClose() {
+        if (editing >= 0) {
+            editing = -1;
+            rebuildWidgets();
+        } else Minecraft.getInstance().setScreen(parent);
+    }
 }

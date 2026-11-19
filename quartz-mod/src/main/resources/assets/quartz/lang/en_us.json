@@ -1,3 +1,5 @@
 {
-  "key.quartz.open_menu": "Open Quartz menu"
+  "key.quartz.open_menu": "Open Quartz menu",
+  "key.category.quartz.client": "Quartz Client",
+  "key.quartz.emote_wheel": "Emote wheel (hold)"
 }

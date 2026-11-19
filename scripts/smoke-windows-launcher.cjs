@@ -16,7 +16,15 @@ async function boot(profile) {
     const window = await app.firstWindow();
     window.on('pageerror', error => console.error(error));
     await window.locator('#view button').first().waitFor({ timeout: 15000 });
-    await window.evaluate(() => openNewInstance());
+    await window.locator('#nav [data-page="browse"]').click();
+    await window.locator('[data-type="modpack"]').click();
+    await window.waitForFunction(() => document.querySelector('#b-version')?.options.length > 10, undefined, {
+      timeout: 15000,
+    });
+    assert.deepEqual(await window.locator('#b-loader option').evaluateAll(options => options.map(option => option.value)),
+      ['', 'fabric', 'quilt']);
+    assert.equal(await window.locator('#b-inst').count(), 0);
+    await window.evaluate(() => { go('play'); openNewInstance(); });
     await window.waitForFunction(() => {
       const select = document.querySelector('#n-ver');
       return select?.options.length > 10 && !select.disabled && Boolean(select.value);

@@ -233,3 +233,21 @@ pre#log {
 .wardrobe-empty { color:#625371; text-align:center; padding:30px 10px; }
 @keyframes wardrobe-in { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
 @media (prefers-reduced-motion: reduce) { .wardrobe-content { animation:none; } }
+
+.style-item canvas {
+  width: 100%; max-width: 170px; height: auto;
+  border-radius: 13px; background: radial-gradient(ellipse at center, #f8edff, #e8d9fa);
+}
+.wardrobe-hint { color: #705d80; margin: 0 0 8px; }
+.wardrobe-wheel {
+  position: relative; height: 376px; max-width: 660px; margin: 0 auto;
+  background: radial-gradient(circle, #faf1ff 0 16%, transparent 17% 31%, #f4e6fc 31.5% 32.5%, transparent 33%);
+}
+.wardrobe-wheel-slot {
+  position: absolute; left: calc(50% + var(--dx) * 28%); top: calc(50% + var(--dy) * 39%);
+  transform: translate(-50%, -50%); width: 138px; display: flex; gap: 5px; flex-direction: column;
+  background: #fffaff; border: 1px solid #e7d3f8; border-radius: 12px; padding: 8px; font-size: 12px;
+}
+.wardrobe-wheel-slot select { width: 100%; padding: 4px; }
+.wardrobe-wheel-title { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: #8145b5; font-weight: 700; }
+.wardrobe-wheel-title kbd { background: #8145b5; color: white; border-radius: 6px; padding: 1px 6px; }

@@ -31,9 +31,9 @@ async function search({ query, type, mcVersion, loader }) {
 async function versionsFor(project, { mcVersion, loader, type }) {
   const q = new URLSearchParams();
   if (mcVersion) q.set('game_versions', JSON.stringify([mcVersion]));
-  if (type === 'mod' && loader && loader !== 'vanilla') {
-    // Quilt potrafi ładować mody Fabric
-    q.set('loaders', JSON.stringify(loader === 'quilt' ? ['quilt', 'fabric'] : [loader]));
+  if ((type === 'mod' || type === 'modpack') && loader && loader !== 'vanilla') {
+    // Quilt can use many individual Fabric mods. Modpacks require their declared loader.
+    q.set('loaders', JSON.stringify(type === 'mod' && loader === 'quilt' ? ['quilt', 'fabric'] : [loader]));
   }
   return getJson(`${API}/project/${project}/version?${q}`);
 }
@@ -68,12 +68,16 @@ async function installFile(project, inst, type, seen = new Set()) {
   return f.filename;
 }
 
-async function latestModpackFile(project) {
-  const versions = await getJson(`${API}/project/${project}/version`);
-  const v = versions[0];
-  if (!v) throw new Error('Modpack nie ma żadnej wersji');
-  const f = v.files.find((x) => x.primary) || v.files[0];
-  return f;
+async function latestModpackFile(project, { mcVersion, loader } = {}) {
+  const versions = await versionsFor(project, { mcVersion, loader, type: 'modpack' });
+  for (const version of versions) {
+    if (mcVersion && !version.game_versions.includes(mcVersion)) continue;
+    if (loader && !version.loaders.includes(loader)) continue;
+    const files = version.files.filter(file => /\.mrpack$/i.test(file.filename));
+    const file = files.find(entry => entry.primary) || files[0];
+    if (file) return file;
+  }
+  throw new Error('Brak pliku modpacka dla wybranej wersji i loadera.');
 }
 
 module.exports = { search, installFile, latestModpackFile };

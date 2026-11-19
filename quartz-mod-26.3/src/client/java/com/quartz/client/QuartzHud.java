@@ -16,9 +16,12 @@ final class QuartzHud {
     private static final EquipmentSlot[] SLOTS = {
             EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET
     };
-    private static final List<ItemStack> EXAMPLE_ARMOR = List.of(
-            new ItemStack(Items.DIAMOND_HELMET), new ItemStack(Items.DIAMOND_CHESTPLATE),
-            new ItemStack(Items.DIAMOND_LEGGINGS), new ItemStack(Items.DIAMOND_BOOTS));
+    // Title-screen previews are available before the item component registry is bound.
+    private static final List<Identifier> EXAMPLE_ARMOR = List.of(
+            Identifier.withDefaultNamespace("textures/item/diamond_helmet.png"),
+            Identifier.withDefaultNamespace("textures/item/diamond_chestplate.png"),
+            Identifier.withDefaultNamespace("textures/item/diamond_leggings.png"),
+            Identifier.withDefaultNamespace("textures/item/diamond_boots.png"));
     private static final Identifier HOTBAR_TEXTURE = Identifier.withDefaultNamespace("textures/gui/sprites/hud/hotbar.png");
     private static final List<Identifier> EMPTY_ARMOR = List.of(
             Identifier.withDefaultNamespace("container/slot/helmet"),
@@ -116,15 +119,19 @@ final class QuartzHud {
             int columns = Math.min(9, Math.max(1, width / 20));
             int count = Math.min(27, columns * Math.max(1, height / 20));
             for (int i = 0; i < count; i++) {
-                ItemStack item = preview ? (i < EXAMPLE_ARMOR.size() ? EXAMPLE_ARMOR.get(i) : ItemStack.EMPTY)
-                        : client.player.getInventory().getItem(i + 9);
-                cells.add(new Cell(item.getCount() > 1 ? Integer.toString(item.getCount()) : "", item, null));
+                ItemStack item = preview ? ItemStack.EMPTY : client.player.getInventory().getItem(i + 9);
+                Identifier icon = preview && i < EXAMPLE_ARMOR.size() ? EXAMPLE_ARMOR.get(i) : null;
+                cells.add(new Cell(item.getCount() > 1 ? Integer.toString(item.getCount()) : "", item, icon));
             }
             return new Panel("", cells, columns * 20, ((count + columns - 1) / columns) * 20);
         }
         if (module == QuartzHudModule.ARMOR) {
             for (int i = 0; i < SLOTS.length; i++) {
-                ItemStack item = preview ? EXAMPLE_ARMOR.get(i) : client.player.getItemBySlot(SLOTS[i]);
+                if (preview) {
+                    cells.add(new Cell("100%", ItemStack.EMPTY, EXAMPLE_ARMOR.get(i)));
+                    continue;
+                }
+                ItemStack item = client.player.getItemBySlot(SLOTS[i]);
                 int max = item.getMaxDamage();
                 String value = max > 0 ? Math.max(0, 100 - (int) (100L * item.getDamageValue() / max)) + "%" : "";
                 cells.add(new Cell(value, item, item.isEmpty() ? EMPTY_ARMOR.get(i) : null));
@@ -316,6 +323,16 @@ final class QuartzHud {
         }
     }
 
+    private static void drawCellItem(GuiGraphicsExtractor g, Cell cell, int x, int y) {
+        if (cell.icon() == null) {
+            if (!cell.item().isEmpty()) g.item(cell.item(), x, y);
+        } else if (EXAMPLE_ARMOR.contains(cell.icon())) {
+            g.blit(RenderPipelines.GUI_TEXTURED, cell.icon(), x, y, 0, 0, 16, 16, 16, 16, 16, 16);
+        } else {
+            g.blitSprite(RenderPipelines.GUI_TEXTURED, cell.icon(), x, y, 16, 16);
+        }
+    }
+
     private static void armor(GuiGraphicsExtractor g, Minecraft client, Panel panel, int x, int y, QuartzConfig.Hud settings) {
         if (settings.background) {
             if (settings.armorSmooth) QuartzTheme.hudBackground(g, x, y, panel.width(), panel.height(), settings.bg);
@@ -325,8 +342,7 @@ final class QuartzHud {
             Cell cell = panel.cells().get(i);
             int left = x + 3 + (settings.armorHorizontal ? i * ARMOR_SLOT : 0);
             int top = y + 3 + (settings.armorHorizontal ? 0 : i * ARMOR_SLOT);
-            if (cell.icon() != null) g.blitSprite(RenderPipelines.GUI_TEXTURED, cell.icon(), left, top, 16, 16);
-            else g.item(cell.item(), left, top);
+            drawCellItem(g, cell, left, top);
             if (settings.showValue && !cell.value().isEmpty()) {
                 var pose = g.pose();
                 pose.pushMatrix();
@@ -371,7 +387,7 @@ final class QuartzHud {
             for (int i = 0; i < panel.cells().size(); i++) {
                 Cell cell = panel.cells().get(i);
                 int left = x + i % columns * 20, top = y + i / columns * 20;
-                if (!cell.item().isEmpty()) g.item(cell.item(), left + 2, top + 2);
+                drawCellItem(g, cell, left + 2, top + 2);
                 if (settings.showValue && !cell.value().isEmpty())
                     g.text(font, cell.value(), left + 18 - font.width(cell.value()), top + 11, settings.fg, settings.shadow);
             }
@@ -394,8 +410,7 @@ final class QuartzHud {
         for (int i = 0; i < panel.cells().size(); i++) {
             Cell cell = panel.cells().get(i);
             int left = x + i % columns * CELL_WIDTH, top = y + i / columns * line;
-            if (!cell.item().isEmpty()) g.item(cell.item(), left + 9, top + 5);
-            if (cell.icon() != null) g.blitSprite(RenderPipelines.GUI_TEXTURED, cell.icon(), left + 9, top + 5, 16, 16);
+            drawCellItem(g, cell, left + 9, top + 5);
             if (settings.showValue) {
                 String value = font.plainSubstrByWidth(cell.value(), CELL_WIDTH - 2);
                 g.text(font, value, left + (CELL_WIDTH - font.width(value)) / 2, top + 26, settings.fg, settings.shadow);

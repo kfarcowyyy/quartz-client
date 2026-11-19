@@ -3,6 +3,7 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { nativeImage } = require('electron');
 const paths = require('./paths');
+const catalog = require('./style-catalog.json');
 
 const skinId = /^[0-9a-f]{32}-(wide|slim)$/;
 const noSkin = 'account';
@@ -102,16 +103,12 @@ function removeSkin(account, id) {
   fs.rmSync(file.slice(0, -4) + '.json', { force: true });
 }
 
-async function loadCapes(account, authorization) {
-  if (account?.type !== 'microsoft') return [];
-  if (!authorization?.access_token) throw new Error('Sign in to Minecraft to view account capes.');
-  const response = await fetch('https://api.minecraftservices.com/minecraft/profile', {
-    headers: { Authorization: 'Bearer ' + authorization.access_token },
-    redirect: 'error',
-    signal: AbortSignal.timeout(5000),
-  });
-  if (!response.ok) throw new Error('Could not load your Minecraft capes.');
-  const profile = await response.json();
+function cachedCapes(account) {
+  const capes = readJson(sibling(account, '-capes.json'), null);
+  return Array.isArray(capes) ? capes : null;
+}
+
+function cacheCapes(account, profile) {
   if (String(profile.id).replace(/-/g, '').toLowerCase() !== String(account.uuid).replace(/-/g, '').toLowerCase()) {
     throw new Error('The signed in Minecraft account changed.');
   }
@@ -125,4 +122,34 @@ async function loadCapes(account, authorization) {
   return capes;
 }
 
-module.exports = { profileFile, read, listSkins, selectSkin, addSkin, removeSkin, loadCapes };
+function readStyle(account) {
+  const profile = profileFile(account);
+  const models = profile && readJson(sibling(account, '-models.json'), {});
+  const wheel = profile && readJson(sibling(account, '-emotes.json'), []);
+  const equipped = Object.fromEntries(catalog.cosmetics.filter(item => models?.[item.slot] === item.id)
+    .map(item => [item.slot, item.id]));
+  const slots = Array.from({ length: 8 }, (_, i) =>
+    Array.isArray(wheel) && catalog.emotes.some(item => item.id === wheel[i]) ? wheel[i] : null);
+  return { ...catalog, equipped, slots };
+}
+
+function equipModel(account, id) {
+  const item = catalog.cosmetics.find(entry => entry.id === id);
+  if (!item) throw new Error('Unknown cosmetic.');
+  const { equipped } = readStyle(account);
+  if (equipped[item.slot] === id) delete equipped[item.slot];
+  else equipped[item.slot] = id;
+  writeJson(sibling(account, '-models.json'), equipped);
+  return readStyle(account);
+}
+
+function setEmote(account, index, id) {
+  if (!Number.isInteger(index) || index < 0 || index >= 8 ||
+      (id !== null && !catalog.emotes.some(item => item.id === id))) throw new Error('Unknown emote or wheel slot.');
+  const { slots } = readStyle(account);
+  slots[index] = id;
+  writeJson(sibling(account, '-emotes.json'), slots);
+  return readStyle(account);
+}
+
+module.exports = { readStyle, equipModel, setEmote, profileFile, read, listSkins, selectSkin, addSkin, removeSkin, cachedCapes, cacheCapes };
