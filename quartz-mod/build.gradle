@@ -2,7 +2,14 @@ plugins {
     id 'net.fabricmc.fabric-loom-remap' version "${loom_version}"
 }
 
-repositories { mavenCentral() }
+repositories {
+    maven {
+        name = "MavenCentralLwjglFallback"
+        url = uri("https://repo1.maven.org/maven2/")
+        content { includeGroup "org.lwjgl" }
+    }
+    mavenCentral()
+}
 
 def minecraftMinor = project.minecraft_version.tokenize(".")[1].toInteger()
 def supportsSplitEnvironment = minecraftMinor >= 18 && !(project.minecraft_version in ['1.18', '1.18.1'])
