@@ -44,7 +44,10 @@ function handle(name, fn) {
     try {
       return { ok: true, data: await fn(...args) };
     } catch (e) {
-      return { ok: false, error: (e && e.message) || String(e) };
+      const message = typeof e === 'string' ? e :
+        [e?.message, e?.error?.message, e?.error_description, e?.description].find(value =>
+          typeof value === 'string' && value.trim() && value !== '[object Object]');
+      return { ok: false, error: message || 'Could not complete the request. Sign in again if the problem is account related.' };
     }
   });
 }
@@ -96,6 +99,9 @@ handle('settings:set', (patch) => {
   return publicSettings(store.set(Object.fromEntries(allowed.filter((key) => Object.hasOwn(patch, key))
     .map((key) => [key, patch[key]]))));
 });
+handle('cosmetics:style', () => cosmetics.readStyle(auth.status()));
+handle('cosmetics:equip-model', (id) => cosmetics.equipModel(auth.status(), id));
+handle('cosmetics:set-emote', (index, id) => cosmetics.setEmote(auth.status(), index, id));
 handle('cosmetics:get', () => {
   const account = auth.status();
   return { skins: cosmetics.listSkins(account), equipped: cosmetics.read(account) };
@@ -114,7 +120,14 @@ handle('cosmetics:equip-skin', (id) => cosmetics.selectSkin(auth.status(), id));
 handle('cosmetics:remove-skin', (id) => cosmetics.removeSkin(auth.status(), id));
 handle('cosmetics:capes', async () => {
   const account = auth.status();
-  return account?.type === 'microsoft' ? cosmetics.loadCapes(account, await auth.authorization()) : [];
+  if (account?.type !== 'microsoft') return [];
+  try {
+    return await cosmetics.loadCapes(account, await auth.authorization());
+  } catch {
+    const cached = cosmetics.cachedCapes(account);
+    if (cached) return cached;
+    throw new Error('Could not refresh Minecraft capes. Check the connection and sign in to Microsoft again.');
+  }
 });
 
 handle('instances:list', () => instances.list());
