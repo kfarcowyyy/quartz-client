@@ -31,8 +31,16 @@ with urllib.request.urlopen(request, timeout=30) as response:
 published = [item.text for item in metadata.findall("./versioning/versions/version") if item.text]
 targets = []
 for identifier in versions:
-    suffix = "+" + identifier
-    api = next((version for version in reversed(published) if version.endswith(suffix)), None)
+    parts = identifier.split(".")
+    candidates = [identifier]
+    if len(parts) == 3:
+        candidates.append(".".join(parts[:2]))
+    api = None
+    for candidate in candidates:
+        suffix = "+" + candidate
+        api = next((version for version in reversed(published) if version.endswith(suffix)), None)
+        if api is not None:
+            break
     if api is None:
         raise SystemExit(f"No published Fabric API found for Minecraft {identifier}")
     project = "quartz-mod-26.3" if identifier.startswith("26.") else "quartz-mod"
