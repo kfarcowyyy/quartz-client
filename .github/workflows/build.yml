@@ -13,7 +13,9 @@ jobs:
       fail-fast: false
       matrix:
         target:
+          - { id: "1.21.9", project: "quartz-mod", api: "0.134.0+1.21.9" }
           - { id: "1.21.10", project: "quartz-mod", api: "0.138.4+1.21.10" }
+          - { id: "26.1.2", project: "quartz-mod-26.3", api: "0.152.1+26.1.2" }
           - { id: "26.2", project: "quartz-mod-26.3", api: "0.160.0+26.2" }
     runs-on: ubuntu-latest
     steps:
@@ -25,10 +27,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.8.2"
-      - name: Adapt the 1.21.10 Mojang names
-        if: matrix.target.id == '1.21.10'
-        run: |
-          find quartz-mod/src -name '*.java' -print0 | xargs -0 sed -i 's/\bIdentifier\b/ResourceLocation/g'
+      - name: Prepare version-specific Java sources
+        run: python3 scripts/prepare-quartz-port.py ${{ matrix.target.id }} ${{ matrix.target.project }}
       - name: Compile Quartz mod
         run: gradle -p ${{ matrix.target.project }} -Pminecraft_version=${{ matrix.target.id }} -Pfabric_api_version=${{ matrix.target.api }} build
       - name: Stage the runtime mod JAR
