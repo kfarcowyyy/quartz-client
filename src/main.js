@@ -230,9 +230,6 @@ handle('game:play', async (id) => {
   send('status', 'Przygotowuję loader...');
   const customId = await loaders.prepare(inst);
   const hasQuartz = quartzMod.install(inst);
-  if (!hasQuartz && inst.loader !== 'vanilla') {
-    send('log', `[Quartz] Mod build unavailable for ${inst.loader} / Minecraft ${inst.mcVersion}.`);
-  }
   const wardrobeAccount = auth.status();
   const wardrobeFile = cosmetics.profileFile(wardrobeAccount);
   if (hasQuartz && wardrobeAccount?.type === 'microsoft') {

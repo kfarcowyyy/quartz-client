@@ -71,7 +71,9 @@ async function boot(profile) {
     const model = window.locator('.interactive-model');
     await model.waitFor();
     await model.focus();
+    const beforeRotation = await model.evaluate(canvas => canvas.toDataURL());
     await model.press('ArrowRight');
+    assert.notEqual(await model.evaluate(canvas => canvas.toDataURL()), beforeRotation);
     const equip = window.locator('[data-wardrobe-action="equip"]');
     if (await equip.isEnabled()) await equip.click();
     await equip.waitFor();
