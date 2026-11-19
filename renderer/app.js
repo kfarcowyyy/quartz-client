@@ -328,7 +328,6 @@ function viewBrowse() {
     <select id="b-loader" aria-label="Loader modpacka">
       <option value="">Wszystkie loadery</option>
       <option value="fabric" ${b.packLoader === 'fabric' ? 'selected' : ''}>Fabric</option>
-      <option value="quilt" ${b.packLoader === 'quilt' ? 'selected' : ''}>Quilt</option>
     </select>` : `<select id="b-inst" aria-label="Instancja">${instOpts}</select>`;
   const results = b.results
     .map(

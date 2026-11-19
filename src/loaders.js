@@ -3,12 +3,12 @@ const path = require('path');
 const { getJson } = require('./net');
 const paths = require('./paths');
 
-// Instaluje profil Fabric/Quilt do wspólnego katalogu wersji i zwraca jego id.
+// Instaluje profil Fabric do wspólnego katalogu wersji i zwraca jego id.
 // Dla vanilla zwraca undefined.
 async function prepare(inst) {
   if (inst.loader === 'vanilla') return undefined;
-  const meta =
-    inst.loader === 'fabric' ? 'https://meta.fabricmc.net/v2' : 'https://meta.quiltmc.org/v3';
+  if (inst.loader !== 'fabric') throw new Error('Quartz obsługuje instalacje Fabric i Vanilla.');
+  const meta = 'https://meta.fabricmc.net/v2';
 
   const all = await getJson(`${meta}/versions/loader/${inst.mcVersion}`);
   if (!all.length) throw new Error(`${inst.loader} nie wspiera wersji ${inst.mcVersion}`);
