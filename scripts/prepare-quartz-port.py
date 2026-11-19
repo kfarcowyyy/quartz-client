@@ -314,10 +314,31 @@ if args.version in {"1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1
     if args.version in {"1.20.5", "1.20.6"}:
         for file in (args.project / "src").rglob("*.java"):
             replace_in(file, [
+                ("net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(", "new net.minecraft.resources.ResourceLocation("),
                 ("ResourceLocation.fromNamespaceAndPath(", "new ResourceLocation("),
                 ("ResourceLocation.withDefaultNamespace(", 'new ResourceLocation("minecraft", '),
                 ("ResourceLocation.parse(", "new ResourceLocation("),
             ])
+        client = args.project / "src/client/java/com/quartz/client"
+        replace_in(client / "QuartzTitleScreen.java", [
+            ("net.minecraft.client.gui.screens.options.OptionsScreen", "net.minecraft.client.gui.screens.OptionsScreen"),
+        ])
+        style_path = client / "QuartzStyleLayer.java"
+        style = style_path.read_text(encoding="utf-8").rstrip()
+        style = re.sub(r"(MOUTH|LIP|piece)\.part\(\)\.render\((pose, collector\.getBuffer\(\w+\), [^\n]+?, OverlayTexture\.NO_OVERLAY), \1\.color\(\)\);",
+                       r"renderTinted(\1.part(), \2, \1.color());", style)
+        style_path.write_text(style[:-1] + """
+    private static void renderTinted(ModelPart part, PoseStack pose, com.mojang.blaze3d.vertex.VertexConsumer vertices,
+                                     int light, int overlay, int color) {
+        part.render(pose, vertices, light, overlay, ((color >>> 16) & 255) / 255f,
+                ((color >>> 8) & 255) / 255f, (color & 255) / 255f, (color >>> 24) / 255f);
+    }
+}
+""", encoding="utf-8")
+    if args.version == "1.20.5":
+        replace_in(args.project / "src/main/java/com/quartz/QuartzServerStyle.java", [
+            ("context.server()", "context.player().server"),
+        ])
 elif args.version in {"26.1", "26.1.1", "26.1.2", "26.2"}:
     prepare_named(args.project)
     if args.version.startswith("26.1"):
