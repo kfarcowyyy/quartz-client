@@ -503,7 +503,7 @@ def prepare_1201_screen_apis(root):
     (client / "mixin/QuartzPlayerSkinMixin.java").write_text(
         "package com.quartz.client.mixin;\n", encoding="utf-8")
     mixins = root / "src/client/resources/quartz.client.mixins.json"
-    replace_in(mixins, [('", "QuartzPlayerSkinMixin"', '"')])
+    replace_in(mixins, [(', "QuartzPlayerSkinMixin"', '')])
 
 
 parser = argparse.ArgumentParser()
