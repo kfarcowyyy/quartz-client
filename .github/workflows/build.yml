@@ -1,20 +1,37 @@
 name: Build Quartz Client
 on:
   push:
-    branches: ["quartz-mod-first-build", "quartz-cosmetics", "quartz-refinements"]
+    branches: ["quartz-mod-first-build", "quartz-cosmetics", "quartz-refinements", "quartz-version-ports"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
 jobs:
+  targets:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.versions.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: versions
+        run: |
+          python3 scripts/generate-quartz-targets.py
+          matrix=$(jq -c '
+            ["1.16", "1.16.1", "1.16.2", "1.16.3", "1.17", "1.18", "1.18.1", "1.19", "1.19.1"] as $first
+            | sort_by(.id as $id | ($first | index($id) // length))
+          ' src/quartz-build-targets.json)
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
   build-mod:
+    needs: targets
     strategy:
       fail-fast: false
+      max-parallel: 8
       matrix:
-        target:
-          - { id: "1.21.11", project: "quartz-mod" }
-          - { id: "26.3", project: "quartz-mod-26.3" }
+        target: ${{ fromJSON(needs.targets.outputs.matrix) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,8 +42,26 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.8.2"
+          cache-read-only: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+      - name: Prepare matching Java sources
+        if: matrix.target.port
+        run: python3 scripts/prepare-quartz-port.py ${{ matrix.target.id }} ${{ matrix.target.project }}
       - name: Compile Quartz mod
-        run: gradle -p ${{ matrix.target.project }} build
+        shell: bash
+        run: |
+          args=(-p "${{ matrix.target.project }}" "-Pminecraft_version=${{ matrix.target.id }}" "-Pfabric_api_version=${{ matrix.target.api }}" build)
+          log="$RUNNER_TEMP/gradle-build.log"
+          set -o pipefail
+          if gradle "${args[@]}" 2>&1 | tee "$log"; then exit 0; fi
+          if grep -qiE 'Could not resolve all (artifacts|files)|Could not GET|Read timed out' "$log"; then
+            for delay in 12 30; do
+              sleep "$delay"
+              if gradle "${args[@]}"; then exit 0; fi
+            done
+            exit 1
+          else
+            exit 1
+          fi
       - name: Stage the runtime mod JAR
         shell: bash
         run: |
@@ -44,6 +79,7 @@ jobs:
           grep -Fx 'com/quartz/client/QuartzHud.class' dist/jar-entries.txt
           grep -Fx 'com/quartz/client/QuartzHudModule.class' dist/jar-entries.txt
           grep -Fx 'com/quartz/client/QuartzHudSettingsScreen.class' dist/jar-entries.txt
+          grep -Fx 'com/quartz/client/QuartzColorPickerScreen.class' dist/jar-entries.txt
           grep -Fx 'com/quartz/client/QuartzPackDetailsScreen.class' dist/jar-entries.txt
           grep -Fx 'com/quartz/client/QuartzPackVersionScreen.class' dist/jar-entries.txt
           grep -Fx 'com/quartz/client/QuartzPackDownloads.class' dist/jar-entries.txt
@@ -60,6 +96,54 @@ jobs:
           grep -Fx 'fabric.mod.json' dist/jar-entries.txt
           cp "$jar" "dist/Quartz-Client-Mod-${{ matrix.target.id }}.jar"
           ls -lh dist
+      - name: Set up software graphics for Minecraft 26.3
+        if: matrix.target.id == '26.3'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl-mesa0 mesa-vulkan-drivers
+          echo "SDL_VIDEO_FORCE_EGL=1" >> "$GITHUB_ENV"
+          echo "LIBGL_ALWAYS_SOFTWARE=1" >> "$GITHUB_ENV"
+          driver=$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' -print -quit)
+          test -n "$driver"
+          echo "VK_DRIVER_FILES=$driver" >> "$GITHUB_ENV"
+      - name: Launch Minecraft to its main menu
+        shell: bash
+        env:
+          QUARTZ_SMOKE_TEST: "1"
+          ALSOFT_DRIVERS: "null"
+        run: |
+          project="${{ matrix.target.project }}"
+          mkdir -p "$project/run"
+          printf 'onboardAccessibility:false\n' > "$project/run/options.txt"
+          args=(-p "$project" "-Pminecraft_version=${{ matrix.target.id }}" "-Pfabric_api_version=${{ matrix.target.api }}")
+          assets_log="$RUNNER_TEMP/quartz-assets.log"
+          for attempt in 1 2 3; do
+            if gradle "${args[@]}" downloadAssets > "$assets_log" 2>&1; then
+              break
+            fi
+            if [[ "$attempt" == 3 ]] || ! grep -qiE 'DownloadException|Could not GET|Read timed out|Could not resolve all artifacts' "$assets_log"; then
+              tail -100 "$assets_log"
+              exit 1
+            fi
+            sleep $((attempt * 10))
+          done
+          log="$RUNNER_TEMP/quartz-launch.log"
+          setsid xvfb-run -a gradle "${args[@]}" runClient > "$log" 2>&1 &
+          game=$!
+          trap 'kill -TERM -- "-$game" 2>/dev/null || true' EXIT
+          for i in {1..76}; do
+            if grep -q 'Quartz Client smoke test: menu rendered' "$log"; then
+              sleep 5
+              if kill -0 "$game" 2>/dev/null && ! grep -qiE 'Game crashed|MixinApplyError|Critical injection failure' "$log"; then
+                echo "Minecraft ${{ matrix.target.id }} reached the main menu"
+                exit 0
+              fi
+            fi
+            kill -0 "$game" 2>/dev/null || break
+            sleep 3
+          done
+          tail -245 "$log"
+          exit 1
       - uses: actions/upload-artifact@v4
         with:
           name: quartz-client-mod-${{ matrix.target.id }}
@@ -67,7 +151,7 @@ jobs:
           if-no-files-found: error
   windows:
     runs-on: windows-latest
-    needs: build-mod
+    needs: [targets, build-mod]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -75,22 +159,22 @@ jobs:
           node-version: "22"
       - uses: actions/download-artifact@v4
         with:
-          name: quartz-client-mod-1.21.11
-          path: quartz-mods/fabric/1.21.11
-      - uses: actions/download-artifact@v4
-        with:
-          name: quartz-client-mod-26.3
-          path: quartz-mods/fabric/26.3
+          pattern: quartz-client-mod-*
+          path: downloaded-mods
       - name: Bundle Fabric builds and their dependencies
         shell: bash
+        env:
+          QUARTZ_TARGETS: ${{ needs.targets.outputs.matrix }}
         run: |
-          stage() {
-            local mc="$1" api="$2" folder="quartz-mods/fabric/$1"
-            mv "$folder/Quartz-Client-Mod-$mc.jar" "$folder/quartz-client.jar"
+          set -euo pipefail
+          node -e "const targets = JSON.parse(process.env.QUARTZ_TARGETS); if (!targets.length) throw new Error('No Quartz versions generated'); require('fs').writeFileSync('src/quartz-build-targets.json', JSON.stringify(targets, null, 2) + '\n')"
+          node -p "require('./src/quartz-build-targets.json').map(({id,api}) => id+' '+api).join('\n')" |
+          while read -r mc api; do
+            folder="quartz-mods/fabric/$mc"
+            mkdir -p "$folder"
+            mv "downloaded-mods/quartz-client-mod-$mc/Quartz-Client-Mod-$mc.jar" "$folder/quartz-client.jar"
             curl --fail --location --retry 3 "https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/$api/fabric-api-$api.jar" -o "$folder/fabric-api.jar"
-          }
-          stage '1.21.11' '0.141.6+1.21.11'
-          stage '26.3' '0.166.2+26.3'
+          done
       - run: npm install --no-audit --no-fund
       - run: npm run dist
         env:
@@ -119,12 +203,9 @@ jobs:
           path: release-files
       - uses: actions/download-artifact@v4
         with:
-          name: quartz-client-mod-1.21.11
+          pattern: quartz-client-mod-*
           path: release-files
-      - uses: actions/download-artifact@v4
-        with:
-          name: quartz-client-mod-26.3
-          path: release-files
+          merge-multiple: true
       - name: Publish the Windows installer and server mods
         env:
           GH_TOKEN: ${{ github.token }}

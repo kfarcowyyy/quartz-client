@@ -35,7 +35,8 @@ processResources {
     from('../renderer/web-suit.png') { into 'assets/quartz/textures/wardrobe' }
     from('../renderer/style-previews.png') { into 'assets/quartz/textures/wardrobe' }
     inputs.property 'version', project.version
-    filesMatching('fabric.mod.json') { expand version: project.version }
+    inputs.property 'minecraftVersion', project.minecraft_version
+    filesMatching('fabric.mod.json') { expand version: project.version, minecraftVersion: project.minecraft_version }
 }
 
 tasks.withType(JavaCompile).configureEach {

@@ -2,16 +2,31 @@ plugins {
     id 'net.fabricmc.fabric-loom-remap' version "${loom_version}"
 }
 
-repositories { mavenCentral() }
+repositories {
+    maven {
+        name = "MavenCentralLwjglFallback"
+        url = uri("https://repo1.maven.org/maven2/")
+        content { includeGroup "org.lwjgl" }
+    }
+    mavenCentral()
+}
+
+def minecraftMinor = project.minecraft_version.tokenize(".")[1].toInteger()
+def supportsSplitEnvironment = minecraftMinor >= 18 && !(project.minecraft_version in ['1.18', '1.18.1'])
 
 loom {
-    splitEnvironmentSourceSets()
+    if (supportsSplitEnvironment) splitEnvironmentSourceSets()
     mods {
         "quartz" {
             sourceSet sourceSets.main
-            sourceSet sourceSets.client
+            if (supportsSplitEnvironment) sourceSet sourceSets.client
         }
     }
+}
+
+if (!supportsSplitEnvironment) {
+    sourceSets.main.java.srcDir "src/client/java"
+    sourceSets.main.resources.srcDir "src/client/resources"
 }
 
 dependencies {
@@ -36,7 +51,8 @@ processResources {
     from('../renderer/web-suit.png') { into 'assets/quartz/textures/wardrobe' }
     from('../renderer/style-previews.png') { into 'assets/quartz/textures/wardrobe' }
     inputs.property 'version', project.version
-    filesMatching('fabric.mod.json') { expand version: project.version }
+    inputs.property 'minecraftVersion', project.minecraft_version
+    filesMatching('fabric.mod.json') { expand version: project.version, minecraftVersion: project.minecraft_version }
 }
 
 tasks.withType(JavaCompile).configureEach {

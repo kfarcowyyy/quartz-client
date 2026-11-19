@@ -93,8 +93,9 @@ function renderNav() {
   );
   const a = state.account;
   $('#acct-chip').innerHTML = a
-    ? `<b>${esc(a.name)}</b>${a.type === 'microsoft' ? 'Microsoft (premium)' : 'Offline'}`
+    ? `<canvas id="account-head" width="38" height="38" aria-hidden="true"></canvas><span><b>${esc(a.name)}</b>${a.type === 'microsoft' ? 'Microsoft (premium)' : 'Offline'}</span>`
     : '<b>Niezalogowano</b>Wejdź w zakładkę Konto';
+  void updateAccountHead();
 }
 
 function go(page) {
@@ -137,6 +138,7 @@ function viewPlay() {
 
 function bindPlay() {
   const sel = $('#sel-inst');
+  if (sel) addQuartzPicker(sel);
   if (sel) sel.addEventListener('change', () => (state.selected = sel.value));
   const play = $('#btn-play');
   if (play)
@@ -209,7 +211,6 @@ function openNewInstance() {
   <div class="overlay"><div class="modal">
     <h2>Nowa instancja</h2>
     <label class="field">Nazwa<input id="n-name" placeholder="Moja instancja" /></label>
-    <label class="check"><input type="checkbox" id="n-snap" /> Pokaż snapshoty</label>
     <label class="field">Wersja Minecrafta<select id="n-ver" disabled></select></label>
     <div class="row">
       <button class="btn" id="n-refresh" type="button">Odśwież listę</button>
@@ -218,7 +219,6 @@ function openNewInstance() {
     <label class="field">Loader
       <select id="n-loader">
         <option value="fabric">Fabric (mody)</option>
-        <option value="quilt">Quilt (mody)</option>
         <option value="vanilla">Vanilla (bez modów)</option>
       </select>
     </label>
@@ -233,15 +233,21 @@ function openNewInstance() {
   const status = $('#n-version-status', root);
   const refresh = $('#n-refresh', root);
   const create = $('#n-ok', root);
+  const loader = $('#n-loader', root);
+  addQuartzPicker(select);
+  addQuartzPicker(loader);
   let loading = false;
   let creating = false;
+  let creationVersions = [];
   const fill = () => {
     const previous = select.value;
-    const snap = $('#n-snap', root).checked;
-    select.innerHTML = state.versions
-      .filter((v) => v.type === 'release' || (snap && v.type === 'snapshot'))
-      .map((v) => `<option value="${esc(v.id)}">${esc(v.id)}</option>`)
-      .join('');
+    const groups = new Map();
+    for (const version of creationVersions) {
+      if (!groups.has(version.family)) groups.set(version.family, []);
+      groups.get(version.family).push(version);
+    }
+    select.innerHTML = [...groups].map(([family, items]) =>
+      `<optgroup label="${esc(family)}.x">${items.map(v => `<option value="${esc(v.id)}">${esc(v.id)}</option>`).join('')}</optgroup>`).join('');
     if (Array.from(select.options).some(option => option.value === previous)) select.value = previous;
     select.disabled = !select.value;
     create.disabled = creating || !select.value;
@@ -252,19 +258,19 @@ function openNewInstance() {
     refresh.disabled = true;
     status.textContent = 'Wczytuję wersje Minecrafta…';
     try {
-      if (!state.versions.length) {
-        const local = await api('versions:list');
+      if (!creationVersions.length) {
+        const local = await api('versions:list', { creationOnly: true });
         if (!select.isConnected) return;
-        state.versions = local.items;
+        creationVersions = local.items;
         fill();
       }
-      const latest = await api('versions:list', { refresh: true, force });
+      const latest = await api('versions:list', { creationOnly: true, refresh: true, force });
       if (!select.isConnected) return;
-      state.versions = latest.items;
+      creationVersions = latest.items;
       fill();
       status.textContent = latest.refreshFailed ? 'Nie udało się pobrać listy wersji. Możesz użyć zapisanej listy.' : '';
     } catch {
-      if (select.isConnected) status.textContent = state.versions.length
+      if (select.isConnected) status.textContent = creationVersions.length
         ? 'Nie udało się pobrać listy wersji. Możesz użyć zapisanej listy.'
         : 'Nie udało się wczytać wersji Minecrafta.';
     } finally {
@@ -273,7 +279,6 @@ function openNewInstance() {
     }
   };
   fill();
-  $('#n-snap', root).addEventListener('change', fill);
   refresh.addEventListener('click', () => versionsInDialog(true));
   versionsInDialog();
   $('#n-cancel').addEventListener('click', () => (root.innerHTML = ''));
@@ -314,7 +319,7 @@ function viewBrowse() {
     .map((i) => `<option value="${esc(i.id)}" ${i.id === state.selected ? 'selected' : ''}>${esc(i.name)} (${esc(i.mcVersion)})</option>`)
     .join('');
   const isPack = b.type === 'modpack';
-  const packVersions = state.versions.filter(v => v.type === 'release' || v.id === b.packVersion)
+  const packVersions = state.versions
     .map(v => `<option value="${esc(v.id)}" ${v.id === b.packVersion ? 'selected' : ''}>${esc(v.id)}</option>`).join('');
   const filters = isPack ? `
     <select id="b-version" aria-label="Wersja Minecrafta">
@@ -323,7 +328,6 @@ function viewBrowse() {
     <select id="b-loader" aria-label="Loader modpacka">
       <option value="">Wszystkie loadery</option>
       <option value="fabric" ${b.packLoader === 'fabric' ? 'selected' : ''}>Fabric</option>
-      <option value="quilt" ${b.packLoader === 'quilt' ? 'selected' : ''}>Quilt</option>
     </select>` : `<select id="b-inst" aria-label="Instancja">${instOpts}</select>`;
   const results = b.results
     .map(
@@ -369,10 +373,10 @@ let packVersionRequest;
 
 function loadPackVersions() {
   packVersionRequest ??= (async () => {
-    const local = await api('versions:list');
+    const local = await api('versions:list', { creationOnly: true });
     state.versions = local.items;
     if (state.page === 'browse' && state.browse.type === 'modpack') render();
-    const latest = await api('versions:list', { refresh: true });
+    const latest = await api('versions:list', { creationOnly: true, refresh: true });
     state.versions = latest.items;
     if (state.page === 'browse' && state.browse.type === 'modpack') render();
   })().catch(error => toast(error.message, true)).finally(() => { packVersionRequest = null; });
@@ -434,6 +438,10 @@ function bindBrowse() {
       render();
     })
   );
+  for (const id of ['#b-inst', '#b-version', '#b-loader']) {
+    const select = $(id);
+    if (select) addQuartzPicker(select);
+  }
   $('#b-inst')?.addEventListener('change', (e) => {
     state.selected = e.target.value;
     runSearch();
@@ -459,7 +467,7 @@ function bindBrowse() {
         const r = await api('browse:install', {
           provider: project.provider,
           type: project.type,
-          project: { id: project.id },
+          project: { id: project.id, title: project.title, icon: project.icon },
           mcVersion: project.type === 'modpack' ? b.packVersion : undefined,
           loader: project.type === 'modpack' ? b.packLoader : undefined,
           instanceId: state.selected,
@@ -557,6 +565,7 @@ function bindSettings() {
   $('#s-cf').addEventListener('change', (e) => save({ curseforgeKey: e.target.value.trim() }));
   $('#s-java').addEventListener('change', (e) => save({ javaPath: e.target.value.trim() }));
   $('#s-lang').value = state.settings.language || 'en';
+  addQuartzPicker($('#s-lang'));
   $('#s-lang').addEventListener('change', async (e) => {
     try {
       await save({ language: e.target.value });
@@ -620,7 +629,7 @@ function fileRowsHtml(animate) {
     .map(
       (it, i) => `
     <div class="file ${it.enabled ? '' : 'off'} ${animate ? '' : 'no-anim'}" style="animation-delay:${animate ? Math.min(i, 14) * 22 : 0}ms">
-      <div class="fi k-${it.kind}">${KIND_LABEL[it.kind][0]}</div>
+      <div class="fi k-${it.kind}">${it.icon ? `<img src="${esc(it.icon)}" alt="" loading="lazy" />` : '<span></span>'}<span class="fi-fallback">${KIND_LABEL[it.kind][0]}</span></div>
       <div class="meta">
         <div class="t">${esc(it.title)}</div>
         <div class="s">${KIND_LABEL[it.kind]} · ${fmtSize(it.size)}${it.enabled ? '' : ' · wyłączony'}</div>
@@ -667,6 +676,10 @@ function viewInstance() {
 
 function bindFiles() {
   const d = state.detail;
+  for (const image of document.querySelectorAll('.fi img')) {
+    image.addEventListener('error', () => image.remove(), { once: true });
+    if (image.complete && !image.naturalWidth) image.remove();
+  }
   document.querySelectorAll('[data-sw]').forEach((cb) =>
     cb.addEventListener('change', async () => {
       const it = d.rows[Number(cb.dataset.sw)];

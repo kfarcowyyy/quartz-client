@@ -12,6 +12,7 @@ import net.minecraft.client.gui.screens.worldselection.SelectWorldScreen;
 import net.minecraft.network.chat.Component;
 
 public final class QuartzTitleScreen extends Screen {
+    private static boolean smokeMenuReported;
     private int left, top, panelWidth;
 
     private QuartzTitleScreen() { super(Component.literal("Quartz Client")); }
@@ -80,5 +81,9 @@ public final class QuartzTitleScreen extends Screen {
         g.text(font, brand, brandX + 25, brandY + 10, QuartzTheme.ACCENT, false);
         QuartzTheme.card(g, left - 10, top - 7, panelWidth + 20, 89, 0xFFFAF6FE, QuartzTheme.OUTLINE);
         super.extractRenderState(g, mouseX, mouseY, delta);
+        if (!smokeMenuReported && "1".equals(System.getenv("QUARTZ_SMOKE_TEST"))) {
+            smokeMenuReported = true;
+            System.out.println("Quartz Client smoke test: menu rendered");
+        }
     }
 }

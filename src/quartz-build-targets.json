@@ -1,0 +1,122 @@
+[
+  {
+    "id": "1.20.4",
+    "project": "quartz-mod",
+    "api": "0.97.3+1.20.4",
+    "port": true
+  },
+  {
+    "id": "1.20.5",
+    "project": "quartz-mod",
+    "api": "0.97.8+1.20.5",
+    "port": true
+  },
+  {
+    "id": "1.20.6",
+    "project": "quartz-mod",
+    "api": "0.100.8+1.20.6",
+    "port": true
+  },
+  {
+    "id": "1.21",
+    "project": "quartz-mod",
+    "api": "0.102.0+1.21",
+    "port": true
+  },
+  {
+    "id": "1.21.1",
+    "project": "quartz-mod",
+    "api": "0.116.0+1.21.1",
+    "port": true
+  },
+  {
+    "id": "1.21.2",
+    "project": "quartz-mod",
+    "api": "0.106.1+1.21.2",
+    "port": true
+  },
+  {
+    "id": "1.21.3",
+    "project": "quartz-mod",
+    "api": "0.114.1+1.21.3",
+    "port": true
+  },
+  {
+    "id": "1.21.4",
+    "project": "quartz-mod",
+    "api": "0.119.4+1.21.4",
+    "port": true
+  },
+  {
+    "id": "1.21.5",
+    "project": "quartz-mod",
+    "api": "0.128.2+1.21.5",
+    "port": true
+  },
+  {
+    "id": "1.21.6",
+    "project": "quartz-mod",
+    "api": "0.128.2+1.21.6",
+    "port": true
+  },
+  {
+    "id": "1.21.7",
+    "project": "quartz-mod",
+    "api": "0.129.0+1.21.7",
+    "port": true
+  },
+  {
+    "id": "1.21.8",
+    "project": "quartz-mod",
+    "api": "0.136.1+1.21.8",
+    "port": true
+  },
+  {
+    "id": "1.21.9",
+    "project": "quartz-mod",
+    "api": "0.134.0+1.21.9",
+    "port": true
+  },
+  {
+    "id": "1.21.10",
+    "project": "quartz-mod",
+    "api": "0.138.4+1.21.10",
+    "port": true
+  },
+  {
+    "id": "1.21.11",
+    "project": "quartz-mod",
+    "api": "0.141.6+1.21.11",
+    "port": false
+  },
+  {
+    "id": "26.1",
+    "project": "quartz-mod-26.3",
+    "api": "0.145.0+26.1",
+    "port": true
+  },
+  {
+    "id": "26.1.1",
+    "project": "quartz-mod-26.3",
+    "api": "0.145.3+26.1.1",
+    "port": true
+  },
+  {
+    "id": "26.1.2",
+    "project": "quartz-mod-26.3",
+    "api": "0.152.1+26.1.2",
+    "port": true
+  },
+  {
+    "id": "26.2",
+    "project": "quartz-mod-26.3",
+    "api": "0.160.0+26.2",
+    "port": true
+  },
+  {
+    "id": "26.3",
+    "project": "quartz-mod-26.3",
+    "api": "0.166.2+26.3",
+    "port": false
+  }
+]

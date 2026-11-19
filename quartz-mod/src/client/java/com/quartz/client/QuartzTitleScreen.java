@@ -2,7 +2,6 @@ package com.quartz.client;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
@@ -12,6 +11,7 @@ import net.minecraft.client.gui.screens.worldselection.SelectWorldScreen;
 import net.minecraft.network.chat.Component;
 
 public final class QuartzTitleScreen extends Screen {
+    private static boolean smokeMenuReported;
     private int left, top, panelWidth;
 
     private QuartzTitleScreen() { super(Component.literal("Quartz Client")); }
@@ -25,11 +25,12 @@ public final class QuartzTitleScreen extends Screen {
         @Override
         protected void init() {
             super.init();
-            addRenderableWidget(Button.builder(QuartzText.of("Switch to Quartz menu", "Wróć do menu Quartz"), button -> {
+            addRenderableWidget(new QuartzButton(QuartzText.of("Switch to Quartz menu", "Wróć do menu Quartz"),
+                    6, 6, 126, 20, false, () -> {
                 QuartzConfig.data.classicMenu = false;
                 QuartzConfig.save();
                 minecraft.setScreen(new QuartzTitleScreen());
-            }).bounds(6, 6, 126, 20).build());
+            }));
         }
     }
 
@@ -80,5 +81,9 @@ public final class QuartzTitleScreen extends Screen {
         g.drawString(font, brand, brandX + 25, brandY + 10, QuartzTheme.ACCENT, false);
         QuartzTheme.card(g, left - 10, top - 7, panelWidth + 20, 89, 0xFFFAF6FE, QuartzTheme.OUTLINE);
         super.render(g, mouseX, mouseY, delta);
+        if (!smokeMenuReported && "1".equals(System.getenv("QUARTZ_SMOKE_TEST"))) {
+            smokeMenuReported = true;
+            System.out.println("Quartz Client smoke test: menu rendered");
+        }
     }
 }

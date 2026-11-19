@@ -109,15 +109,34 @@ handle('cosmetics:get', () => {
 handle('cosmetics:add-skin', async (slim) => {
   const account = auth.status();
   const selection = await dialog.showOpenDialog(win, {
-    properties: ['openFile'],
+    properties: ['openFile', 'multiSelections'],
     filters: [{ name: 'Minecraft skin PNG', extensions: ['png'] }],
   });
-  if (!selection.canceled && auth.status()?.uuid === account?.uuid) {
-    cosmetics.addSkin(account, selection.filePaths[0], slim === true);
+  const ids = [];
+  if (selection.canceled || auth.status()?.uuid !== account?.uuid) return { ids, failed: 0 };
+  let lastError, failed = 0;
+  for (const file of selection.filePaths) {
+    try { ids.push(cosmetics.addSkin(account, file, slim === true)); }
+    catch (error) { lastError = error; failed++; }
   }
+  if (!ids.length && lastError) throw lastError;
+  return { ids, failed };
 });
 handle('cosmetics:equip-skin', (id) => cosmetics.selectSkin(auth.status(), id));
 handle('cosmetics:remove-skin', (id) => cosmetics.removeSkin(auth.status(), id));
+handle('cosmetics:active-head', async () => {
+  const account = auth.status();
+  if (!account) return null;
+  const local = cosmetics.activeLocalSkin(account);
+  if (local || account.type !== 'microsoft') return local;
+  try {
+    return await cosmetics.fetchAccountHead(account, await auth.minecraftProfile()) || cosmetics.cachedAccountHead(account);
+  } catch { return cosmetics.cachedAccountHead(account); }
+});
+handle('cosmetics:equip-cape', async (id) => {
+  const account = auth.status();
+  return cosmetics.cacheCapes(account, await auth.equipCape(id));
+});
 handle('cosmetics:capes', async () => {
   const account = auth.status();
   if (account?.type !== 'microsoft') return [];
@@ -148,7 +167,7 @@ handle('content:import', async (id, kind) => {
   return content.importFiles(id, kind, r.filePaths);
 });
 handle('instances:create', async (o) => {
-  const inst = instances.create(o);
+  const inst = await instances.create(o);
   quartzMod.install(inst);
   send('status', 'Instaluję dodatki...');
   await extras.applyDefaults(inst, { voicechat: !!o.voicechat }, (m) =>
@@ -190,10 +209,12 @@ handle('browse:install', async ({ provider, type, project, instanceId, mcVersion
   }
   const inst = instances.get(instanceId);
   if (!inst) throw new Error('Wybierz instancję');
-  if (provider === 'curseforge') {
-    return curseforge.installFile(project.id, inst, type, store.get().curseforgeKey);
-  }
-  return modrinth.installFile(project.id, inst, type);
+  const filename = provider === 'curseforge'
+    ? await curseforge.installFile(project.id, inst, type, store.get().curseforgeKey)
+    : await modrinth.installFile(project.id, inst, type);
+  try { content.rememberDownload(inst.id, type, filename, project); }
+  catch (error) { send('log', '[Quartz] Could not save mod display metadata: ' + error.message); }
+  return filename;
 });
 
 handle('game:play', async (id) => {
@@ -204,14 +225,11 @@ handle('game:play', async (id) => {
   send('status', 'Logowanie...');
   const authorization = await auth.authorization();
 
-  const javaPath = await java.ensureJava(inst.mcVersion, (s) => send('status', s));
+  const hasQuartz = quartzMod.install(inst);
+  const javaPath = await java.ensureJava(inst.mcVersion, (s) => send('status', s), hasQuartz ? 21 : 0);
 
   send('status', 'Przygotowuję loader...');
   const customId = await loaders.prepare(inst);
-  const hasQuartz = quartzMod.install(inst);
-  if (!hasQuartz && inst.loader !== 'vanilla') {
-    send('log', `[Quartz] Mod build unavailable for ${inst.loader} / Minecraft ${inst.mcVersion}.`);
-  }
   const wardrobeAccount = auth.status();
   const wardrobeFile = cosmetics.profileFile(wardrobeAccount);
   if (hasQuartz && wardrobeAccount?.type === 'microsoft') {

@@ -327,7 +327,8 @@ final class QuartzHud {
             int top = y + 3 + (settings.armorHorizontal ? 0 : i * ARMOR_SLOT);
             if (cell.icon() != null) g.blitSprite(RenderPipelines.GUI_TEXTURED, cell.icon(), left, top, 16, 16);
             else g.renderItem(cell.item(), left, top);
-            if (settings.showValue && !cell.value().isEmpty()) {
+            if (!settings.showValue) durabilityBar(g, cell.item(), left, top);
+            if (settings.showValue && (settings.fg >>> 24) >= 4 && !cell.value().isEmpty()) {
                 var pose = g.pose();
                 pose.pushMatrix();
                 try {
@@ -338,6 +339,20 @@ final class QuartzHud {
                 }
             }
         }
+    }
+
+    private static void durabilityBar(GuiGraphics g, ItemStack item, int x, int y) {
+        int max = item.getMaxDamage();
+        int damage = item.getDamageValue();
+        if (max <= 0 || damage <= 0) return;
+        int remaining = Math.max(0, max - damage);
+        int barWidth = Math.max(0, Math.min(13, Math.round(13.0f * remaining / max)));
+        float ratio = remaining / (float) max;
+        int red = Math.round(255 * (1.0f - ratio));
+        int green = Math.round(255 * ratio);
+        int color = 0xFF000000 | (red << 16) | (green << 8);
+        g.fill(x + 2, y + 13, x + 15, y + 15, 0xFF000000);
+        if (barWidth > 0) g.fill(x + 2, y + 13, x + 2 + barWidth, y + 14, color);
     }
 
     private static void armorHotbar(GuiGraphics g, int x, int y, boolean horizontal) {
@@ -372,7 +387,7 @@ final class QuartzHud {
                 Cell cell = panel.cells().get(i);
                 int left = x + i % columns * 20, top = y + i / columns * 20;
                 if (!cell.item().isEmpty()) g.renderItem(cell.item(), left + 2, top + 2);
-                if (settings.showValue && !cell.value().isEmpty())
+                if (settings.showValue && (settings.fg >>> 24) >= 4 && !cell.value().isEmpty())
                     g.drawString(font, cell.value(), left + 18 - font.width(cell.value()), top + 11, settings.fg, settings.shadow);
             }
             return;
@@ -386,7 +401,8 @@ final class QuartzHud {
             return;
         }
         if (!module.icons()) {
-            g.drawString(font, panel.text(), x + 6, y + 5, settings.fg, settings.shadow);
+            if ((settings.fg >>> 24) >= 4)
+                g.drawString(font, panel.text(), x + 6, y + 5, settings.fg, settings.shadow);
             return;
         }
         int columns = Math.max(1, panel.width() / CELL_WIDTH);
@@ -396,7 +412,7 @@ final class QuartzHud {
             int left = x + i % columns * CELL_WIDTH, top = y + i / columns * line;
             if (!cell.item().isEmpty()) g.renderItem(cell.item(), left + 9, top + 5);
             if (cell.icon() != null) g.blitSprite(RenderPipelines.GUI_TEXTURED, cell.icon(), left + 9, top + 5, 16, 16);
-            if (settings.showValue) {
+            if (settings.showValue && (settings.fg >>> 24) >= 4) {
                 String value = font.plainSubstrByWidth(cell.value(), CELL_WIDTH - 2);
                 g.drawString(font, value, left + (CELL_WIDTH - font.width(value)) / 2, top + 26, settings.fg, settings.shadow);
             }

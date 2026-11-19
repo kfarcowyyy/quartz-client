@@ -74,10 +74,8 @@ final class QuartzHudSettingsScreen extends QuartzSafeScreen {
                 rebuildWidgets();
             });
         }
-        field(left, top + 93 - scroll, half, QuartzText.of("Background color", "Kolor tła"), hex(setting.bg), 9,
-                value -> setColor(value, color -> setting.bg = color));
-        field(left + half + 6, top + 93 - scroll, half, QuartzText.of("Text color", "Kolor tekstu"), hex(setting.fg), 9,
-                value -> setColor(value, color -> setting.fg = color));
+        colorOption(left, top + 93 - scroll, half, QuartzText.of("Background color", "Kolor tła"), setting.bg, true);
+        colorOption(left + half + 6, top + 93 - scroll, half, QuartzText.of("Text color", "Kolor tekstu"), setting.fg, false);
         int y = top + 139 - scroll;
         if (!module.icons()) {
             field(left, y, controls, QuartzText.of("Template", "Wzór tekstu"), setting.text == null ? module.template : setting.text,
@@ -139,12 +137,16 @@ final class QuartzHudSettingsScreen extends QuartzSafeScreen {
         addRenderableWidget(new QuartzButton(label, x, y, w, 19, accent, action));
     }
 
-    private static String hex(int color) { return String.format(Locale.ROOT, "%08X", color); }
+    private void colorOption(int x, int y, int w, Component label, int color, boolean background) {
+        String rgb = String.format(Locale.ROOT, "#%06X", color & 0xFFFFFF);
+        option(Component.literal(rgb), x, y, w, false,
+                () -> minecraft.setScreen(new QuartzColorPickerScreen(this, module, label, background)));
+    }
 
-    private static void setColor(String value, java.util.function.IntConsumer accept) {
-        String hex = value.strip().replaceFirst("^#", "");
-        if (!hex.matches("(?i)[0-9a-f]{6}([0-9a-f]{2})?")) return;
-        accept.accept((int) Long.parseLong(hex.length() == 6 ? "FF" + hex : hex, 16));
+    private static void swatch(GuiGraphics graphics, int x, int y, int w, int color) {
+        if (w < 82) return;
+        QuartzColorPickerScreen.checker(graphics, x + 4, y + 5, 10, 9);
+        QuartzTheme.hudBackground(graphics, x + 4, y + 5, 10, 9, color);
     }
 
     @Override public boolean mouseScrolled(double x, double y, double dx, double dy) {
@@ -172,14 +174,20 @@ final class QuartzHudSettingsScreen extends QuartzSafeScreen {
         if (inside(top + 49 - scroll)) g.drawString(font, QuartzText.of("Style", "Styl"), left, top + 36 - scroll, QuartzTheme.ACCENT, false);
         int half = (controls - 6) / 2;
         if (inside(top + 93 - scroll)) {
-            g.drawString(font, QuartzText.of("Background AARRGGBB", "Tło AARRGGBB"), left, top + 81 - scroll, QuartzTheme.MUTED, false);
-            g.drawString(font, QuartzText.of("Text AARRGGBB", "Tekst AARRGGBB"), left + half + 6, top + 81 - scroll, QuartzTheme.MUTED, false);
+            g.drawString(font, QuartzText.of("Background color", "Kolor tła"), left, top + 81 - scroll, QuartzTheme.MUTED, false);
+            g.drawString(font, QuartzText.of("Text color", "Kolor tekstu"), left + half + 6, top + 81 - scroll, QuartzTheme.MUTED, false);
         }
         if (!module.icons() && inside(top + 139 - scroll))
             g.drawString(font, QuartzText.of("Text · {value} inserts the live value", "Tekst · {value} wstawia aktualną wartość"), left, top + 127 - scroll, QuartzTheme.MUTED, false);
         if (module == QuartzHudModule.ITEM_COUNT && inside(top + 185 - scroll))
             g.drawString(font, QuartzText.of("Item ID · blank uses held item", "ID przedmiotu · puste liczy trzymany"), left, top + 173 - scroll, QuartzTheme.MUTED, false);
         drawWidgets(g, mx, my, delta);
+        int colorY = top + 93 - scroll;
+        if (inside(colorY)) {
+            var settings = module.settings();
+            swatch(g, left, colorY, half, settings.bg);
+            swatch(g, left + half + 6, colorY, half, settings.fg);
+        }
     }
 
     @Override public void removed() { QuartzConfig.save(); }

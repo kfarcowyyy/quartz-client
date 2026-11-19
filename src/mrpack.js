@@ -18,7 +18,7 @@ async function importMrpack(file, onStatus, opts = {}) {
 
   let loader = 'vanilla';
   if (deps['fabric-loader']) loader = 'fabric';
-  else if (deps['quilt-loader']) loader = 'quilt';
+  else if (deps['quilt-loader']) throw new Error('Quilt nie jest już obsługiwany. Wybierz modpack dla Fabric.');
   else if (deps.forge || deps.neoforge) {
     throw new Error('Ten modpack wymaga Forge/NeoForge - wsparcie dojdzie w etapie 2');
   }
@@ -26,7 +26,7 @@ async function importMrpack(file, onStatus, opts = {}) {
   if ((opts.mcVersion && deps.minecraft !== opts.mcVersion) || (opts.loader && loader !== opts.loader)) {
     throw new Error('Pobrany modpack nie pasuje do wybranych filtrów.');
   }
-  const inst = instances.create({ name: index.name || 'Modpack', mcVersion: deps.minecraft, loader });
+  const inst = await instances.create({ name: index.name || 'Modpack', mcVersion: deps.minecraft, loader });
   const dir = paths.instDir(inst.id);
 
   const files = (index.files || []).filter((f) => !f.env || f.env.client !== 'unsupported');
