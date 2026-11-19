@@ -1,0 +1,32 @@
+name: Test HUD color picker in Minecraft
+on:
+  push:
+    branches: ["quartz-hud-color-test"]
+permissions:
+  contents: read
+jobs:
+  picker:
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { id: "1.21.5", project: "quartz-mod", api: "0.128.2+1.21.5", port: true }
+          - { id: "26.3", project: "quartz-mod-26.3", api: "0.166.2+26.3", port: false }
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.8.2"
+      - name: Prepare matching Java sources
+        if: matrix.target.port
+        run: python3 scripts/prepare-quartz-port.py ${{ matrix.target.id }} ${{ matrix.target.project }}
+      - name: Install Linux GUI test tools
+        run: sudo apt-get install -y xdotool
+      - name: Change and cancel HUD colors through the game menus
+        run: |
+          xvfb-run -a -s '-screen 0 1280x1024x24' bash scripts/test-hud-color-ui.sh ${{ matrix.target.project }} ${{ matrix.target.id }} ${{ matrix.target.api }}
