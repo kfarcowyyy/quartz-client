@@ -300,10 +300,174 @@ import net.minecraft.client.renderer.MultiBufferSource;"""),
     file.write_text(source, encoding="utf-8")
 
 
+
+def prepare_legacy_style_networking(root):
+    main = root / "src/main/java/com/quartz"
+    client = root / "src/client/java/com/quartz/client"
+    (main / "QuartzStylePacket.java").write_text("""package com.quartz;
+
+import io.netty.buffer.Unpooled;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
+
+public record QuartzStylePacket(int actor, int mask, int emote) {
+    public static final ResourceLocation CHANNEL = new ResourceLocation("quartz", "style_v1");
+
+    public FriendlyByteBuf encode() {
+        FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
+        buffer.writeVarInt(actor);
+        buffer.writeByte(mask);
+        buffer.writeByte(emote);
+        return buffer;
+    }
+
+    public static QuartzStylePacket decode(FriendlyByteBuf buffer) {
+        return new QuartzStylePacket(buffer.readVarInt(), buffer.readByte(), buffer.readByte());
+    }
+
+    public static boolean validSelection(int mask) {
+        return mask >= 0 && mask < 64 && (mask & 3) != 3 && (mask & 12) != 12;
+    }
+}
+""", encoding="utf-8")
+    (main / "QuartzServerStyle.java").write_text("""package com.quartz;
+
+import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.networking.v1.PacketSender;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+public final class QuartzServerStyle implements ModInitializer {
+    private record Look(int actor, int mask, long when) {}
+    private final Map<UUID, Look> players = new HashMap<>();
+
+    @Override public void onInitialize() {
+        ServerPlayNetworking.registerGlobalReceiver(QuartzStylePacket.CHANNEL,
+                (server, player, handler, buffer, responseSender) -> {
+                    QuartzStylePacket packet = QuartzStylePacket.decode(buffer);
+                    server.execute(() -> receive(server, player, packet));
+                });
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
+            ServerPlayer player = handler.player;
+            if (ServerPlayNetworking.canSend(player, QuartzStylePacket.CHANNEL)) {
+                for (Look look : players.values())
+                    send(player, new QuartzStylePacket(look.actor(), look.mask(), 0));
+            }
+        });
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
+            ServerPlayer player = handler.player;
+            var look = players.remove(player.getUUID());
+            if (look != null) broadcast(server, player, new QuartzStylePacket(look.actor(), -1, 0));
+        });
+    }
+
+    private void receive(MinecraftServer server, ServerPlayer player, QuartzStylePacket packet) {
+        if (!QuartzStylePacket.validSelection(packet.mask()) || packet.emote() < 0 || packet.emote() > 8) return;
+        long now = System.nanoTime();
+        var previous = players.get(player.getUUID());
+        if (previous != null && now - previous.when() < 90_000_000L) return;
+        if (previous != null && previous.actor() != player.getId())
+            broadcast(server, player, new QuartzStylePacket(previous.actor(), -1, 0));
+        players.put(player.getUUID(), new Look(player.getId(), packet.mask(), now));
+        broadcast(server, player, new QuartzStylePacket(player.getId(), packet.mask(), packet.emote()));
+    }
+
+    private static void broadcast(MinecraftServer server, ServerPlayer owner, QuartzStylePacket packet) {
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            if (player != owner && ServerPlayNetworking.canSend(player, QuartzStylePacket.CHANNEL))
+                send(player, packet);
+        }
+    }
+
+    private static void send(ServerPlayer player, QuartzStylePacket packet) {
+        ServerPlayNetworking.send(player, QuartzStylePacket.CHANNEL, packet.encode());
+    }
+}
+""", encoding="utf-8")
+    (client / "QuartzSocial.java").write_text("""package com.quartz.client;
+
+import com.quartz.QuartzStylePacket;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.minecraft.client.Minecraft;
+
+import java.util.HashMap;
+import java.util.Map;
+
+final class QuartzSocial {
+    private static final Map<Integer, Integer> APPEARANCES = new HashMap<>();
+    private static int sentMask = -1;
+    private static int sentActor = -1;
+
+    private QuartzSocial() {}
+
+    static void register() {
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> clear());
+        ClientPlayConnectionEvents.INIT.register((handler, client) -> clear());
+        ClientPlayNetworking.registerGlobalReceiver(QuartzStylePacket.CHANNEL,
+                (client, handler, buffer, responseSender) -> {
+                    QuartzStylePacket packet = QuartzStylePacket.decode(buffer);
+                    client.execute(() -> {
+                        if (QuartzStyle.local(packet.actor())) return;
+                        if (packet.mask() == -1) {
+                            APPEARANCES.remove(packet.actor());
+                            QuartzMotion.remote(packet.actor(), null);
+                        } else if (QuartzStylePacket.validSelection(packet.mask())) {
+                            APPEARANCES.put(packet.actor(), packet.mask());
+                            int position = packet.emote() - 1;
+                            if (position >= 0 && position < QuartzStyle.emotes().size())
+                                QuartzMotion.remote(packet.actor(), QuartzStyle.emotes().get(position));
+                        }
+                    });
+                });
+    }
+
+    static void tick(Minecraft client) {
+        if (client.player == null || client.getConnection() == null) return;
+        int mask = QuartzStyle.mask(), actor = client.player.getId();
+        if ((sentMask != mask || sentActor != actor) && send(mask, 0)) {
+            sentMask = mask;
+            sentActor = actor;
+        }
+    }
+
+    static void play(QuartzStyle.Emote emote) {
+        int index = QuartzStyle.emotes().indexOf(emote);
+        if (index >= 0) send(QuartzStyle.mask(), index + 1);
+    }
+
+    static boolean equipped(int actor, QuartzStyle.Accessory item) {
+        int position = QuartzStyle.accessories().indexOf(item);
+        return position >= 0 && (APPEARANCES.getOrDefault(actor, 0) & (1 << position)) != 0;
+    }
+
+    private static boolean send(int mask, int emote) {
+        if (!ClientPlayNetworking.canSend(QuartzStylePacket.CHANNEL)) return false;
+        ClientPlayNetworking.send(QuartzStylePacket.CHANNEL, new QuartzStylePacket(0, mask, emote).encode());
+        return true;
+    }
+
+    private static void clear() {
+        APPEARANCES.clear();
+        sentMask = sentActor = -1;
+        QuartzMotion.clearRemote();
+    }
+}
+""", encoding="utf-8")
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("version")
 parser.add_argument("project", type=Path)
 args = parser.parse_args()
+if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.16.3", "1.16.4", "1.16.5", "1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
+    prepare_legacy_style_networking(args.project)
 if args.version in {"1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10"}:
     prepare_remapped(args.project)
     if args.version in {"1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8"}:
