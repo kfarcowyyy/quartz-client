@@ -92,7 +92,11 @@ jobs:
         shell: bash
         env:
           QUARTZ_SMOKE_TEST: "1"
+          ALSOFT_DRIVERS: "null"
         run: |
+          project="${{ matrix.target.project }}"
+          mkdir -p "$project/run"
+          printf 'onboardAccessibility:false\n' > "$project/run/options.txt"
           log="$RUNNER_TEMP/quartz-launch.log"
           setsid xvfb-run -a gradle -p ${{ matrix.target.project }} -Pminecraft_version=${{ matrix.target.id }} -Pfabric_api_version=${{ matrix.target.api }} runClient > "$log" 2>&1 &
           game=$!

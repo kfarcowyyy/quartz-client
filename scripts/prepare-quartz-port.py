@@ -589,6 +589,8 @@ def prepare_pose_stack_gui(root):
             ("import net.minecraft.client.gui.GuiGraphics;\n", ""),
             ("net.minecraft.client.gui.GuiGraphics", "QuartzGraphics"),
             ("GuiGraphics", "QuartzGraphics"),
+            (".enableScissor(", ".beginScissor("),
+            (".disableScissor()", ".endScissor()"),
         ])
     safe = client / "QuartzSafeScreen.java"
     replace_in(safe, [
@@ -713,14 +715,14 @@ final class QuartzGraphics extends GuiComponent {
         }
     }
 
-    void enableScissor(int x, int y, int right, int bottom) {
+    void beginScissor(int x, int y, int right, int bottom) {
         var window = minecraft.getWindow();
         double scale = window.getGuiScale();
         RenderSystem.enableScissor((int) (x * scale), window.getHeight() - (int) (bottom * scale),
                 (int) ((right - x) * scale), (int) ((bottom - y) * scale));
     }
 
-    void disableScissor() {
+    void endScissor() {
         RenderSystem.disableScissor();
     }
 }
@@ -852,27 +854,187 @@ def prepare_legacy_json(root):
         replace_in(client / filename, substitutions)
 
 
+def prepare_116_rendering(root):
+    client = root / "src/client/java/com/quartz/client"
+    style = client / "QuartzStyleLayer.java"
+    source = style.read_text(encoding="utf-8")
+    source = re.sub(r"(?m)^import net\.minecraft\.client\.model\.geom\.(?:builders\.\w+|PartPose);\n", "", source)
+    start = source.index("        var mesh = new MeshDefinition();")
+    end = source.index("\n    }\n", start)
+    source = source[:start] + '''        int[] uv = box.uv();
+        ModelPart part = new ModelPart(64, 64, uv == null ? 0 : uv[0], uv == null ? 0 : uv[1]);
+        part.addBox(box.x(), box.y(), box.z(), box.w(), box.h(), box.d(), uv == null ? 0f : .19f);
+        return new Piece(box.bone(), part, 0xFF000000 | Integer.parseInt(box.color().substring(1), 16));''' + source[end:]
+    style.write_text(source, encoding="utf-8")
+
+    replace_in(client / "QuartzGraphics.java", [
+        ("RenderSystem.setShaderTexture(0, texture);",
+         "Minecraft.getInstance().getTextureManager().bind(texture);"),
+        ("var modelView = RenderSystem.getModelViewStack();\n        modelView.pushPose();",
+         "RenderSystem.pushMatrix();"),
+        ("modelView.mulPoseMatrix(pose.last().pose());\n            RenderSystem.applyModelViewMatrix();",
+         "RenderSystem.multMatrix(pose.last().pose());"),
+        ("modelView.popPose();\n            RenderSystem.applyModelViewMatrix();",
+         "RenderSystem.popMatrix();"),
+    ])
+    replace_in(client / "QuartzHud.java", [
+        ("client.player.getInventory()", "client.player.inventory"),
+        (".getEyePosition()", ".getEyePosition(1.0f)"),
+    ])
+
+    for file in client.glob("*.java"):
+        replace_in(file, [
+            ("addRenderableWidget(", "addButton("),
+            ("clearWidgets();", "buttons.clear();\n        children.clear();\n        setFocused(null);"),
+            ("JsonParser.parseString(", "new JsonParser().parse("),
+            ("JsonParser.parseReader(", "new JsonParser().parse("),
+        ])
+
+
+def prepare_115_gui(root):
+    client = root / "src/client/java/com/quartz/client"
+    for filename in ("QuartzSafeScreen.java", "QuartzTitleScreen.java", "QuartzButton.java"):
+        replace_in(client / filename, [
+            ("renderBackground(com.mojang.blaze3d.vertex.PoseStack matrices)", "renderBackground()"),
+            ("(com.mojang.blaze3d.vertex.PoseStack matrices, int mouseX, int mouseY, float delta)",
+             "(int mouseX, int mouseY, float delta)"),
+            ("new QuartzGraphics(matrices)", "new QuartzGraphics(new com.mojang.blaze3d.vertex.PoseStack())"),
+            ("super.render(graphics.pose(), mouseX, mouseY, delta)", "super.render(mouseX, mouseY, delta)"),
+            ("super.render(matrices, mouseX, mouseY, delta)", "super.render(mouseX, mouseY, delta)"),
+        ])
+    replace_in(client / "QuartzModClient.java", [
+        ("HudRenderCallback.EVENT.register((matrices, tickCounter) -> {",
+         "HudRenderCallback.EVENT.register(tickCounter -> {"),
+        ("new QuartzGraphics(matrices)", "new QuartzGraphics(new com.mojang.blaze3d.vertex.PoseStack())"),
+    ])
+    replace_in(client / "QuartzMotion.java", [
+        ("import net.minecraft.client.CameraType;\n", ""),
+        ("CameraType previous", "int previous"),
+        ("client.options.getCameraType()", "client.options.thirdPersonView"),
+        ("client.options.setCameraType(CameraType.THIRD_PERSON_BACK)", "client.options.thirdPersonView = 1"),
+        ("client.options.setCameraType(previous)", "client.options.thirdPersonView = previous"),
+        ("CameraType.FIRST_PERSON", "0"), ("CameraType.THIRD_PERSON_BACK", "1"),
+    ])
+    replace_in(client / "QuartzTitleScreen.java", [
+        ("import net.minecraft.client.gui.screens.multiplayer.SafetyScreen;\n", ""),
+        ("minecraft.options.skipMultiplayerWarning ? new JoinMultiplayerScreen(this) : new SafetyScreen(this)",
+         "new JoinMultiplayerScreen(this)"),
+        (").active = minecraft.allowsMultiplayer();", ");"),
+        ("))\n                .active = minecraft.allowsMultiplayer();", "));"),
+    ])
+    replace_in(client / "QuartzHudSettingsScreen.java", [
+        ('.append(setting.showValue ? " ✓" : " ×")',
+         '.append(new net.minecraft.network.chat.TextComponent(setting.showValue ? " ✓" : " ×"))'),
+    ])
+    replace_in(client / "QuartzWardrobeScreen.java", [
+        ('.append((index + 1) + " · ")', '.append(new net.minecraft.network.chat.TextComponent((index + 1) + " · "))'),
+    ])
+    replace_in(client / "QuartzHud.java", [
+        ("stack.is(item)", "stack.getItem() == item"),
+        ("!chest.is(Items.ELYTRA)", "chest.getItem() != Items.ELYTRA"),
+    ])
+    replace_in(client / "mixin/QuartzChatMixin.java", [
+        ("import com.mojang.blaze3d.vertex.PoseStack;", "import com.mojang.blaze3d.systems.RenderSystem;"),
+        ("Lcom/mojang/blaze3d/vertex/PoseStack;I", "I"),
+        ("PoseStack graphics, int tick,", "int tick,"),
+        ("original.call(graphics, tick)", "original.call(tick)"),
+        ("var pose = graphics;\n        pose.pushPose();", "RenderSystem.pushMatrix();"),
+        ("pose.translate(", "RenderSystem.translatef("), ("pose.popPose();", "RenderSystem.popMatrix();"),
+    ])
+    for file in client.glob("*.java"):
+        source = file.read_text(encoding="utf-8")
+        source = re.sub(r"\b(client\.font|font)\.plainSubstrByWidth\(", r"QuartzGraphics.trim(\1, ", source)
+        file.write_text(source, encoding="utf-8")
+    replace_in(client / "QuartzPackDetailsScreen.java", [
+        ("import net.minecraft.util.FormattedCharSequence;\n", ""),
+        ("FormattedCharSequence", "String"),
+        ("font.split(", "QuartzGraphics.wrap(font, "),
+    ])
+    graphics = client / "QuartzGraphics.java"
+    replace_in(graphics, [
+        ("import net.minecraft.util.FormattedCharSequence;\n", ""),
+        ("GuiComponent.fill(pose, x, y, right, bottom, color);",
+         "withPose(() -> GuiComponent.fill(x, y, right, bottom, color));"),
+        ("super.fillGradient(pose, x, y, right, bottom, topColor, bottomColor);",
+         "withPose(() -> super.fillGradient(x, y, right, bottom, topColor, bottomColor));"),
+        ("if (shadow) font.drawShadow(pose, text, x, y, color);\n        else font.draw(pose, text, x, y, color);",
+         "withPose(() -> {\n            if (shadow) font.drawShadow(text, x, y, color);\n"
+         "            else font.draw(text, x, y, color);\n        });"),
+        ("GuiComponent.blit(pose, x, y, width, height, u, v, regionWidth, regionHeight, textureWidth, textureHeight);",
+         "withPose(() -> GuiComponent.blit(x, y, width, height, u, v, regionWidth, regionHeight, textureWidth, textureHeight));"),
+        ("GuiComponent.blit(pose, x, y, z, width, height, sprite);",
+         "withPose(() -> GuiComponent.blit(x, y, z, width, height, sprite));"),
+    ])
+    source = graphics.read_text(encoding="utf-8").rstrip()
+    start = source.index("    void drawString(Font font, Component text")
+    end = source.index("    void drawCenteredString(Font font, Component text", start)
+    source = source[:start] + '''    void drawString(Font font, Component text, int x, int y, int color, boolean shadow) {
+        drawString(font, text.getString(), x, y, color, shadow);
+    }
+
+''' + source[end:]
+    start = source.index("    void drawCenteredString(Font font, Component text")
+    end = source.index("    void drawCenteredString(Font font, String text", start)
+    source = source[:start] + source[start:end].replace("font.width(text)", "font.width(text.getString())") + source[end:]
+    graphics.write_text(source[:-1] + '''    private void withPose(Runnable draw) {
+        RenderSystem.pushMatrix();
+        try {
+            RenderSystem.multMatrix(pose.last().pose());
+            draw.run();
+        } finally {
+            RenderSystem.popMatrix();
+        }
+    }
+
+    static String trim(Font font, String text, int width) {
+        int end = 0;
+        while (end < text.length()) {
+            int next = end + Character.charCount(text.codePointAt(end));
+            if (font.width(text.substring(0, next)) > width) break;
+            end = next;
+        }
+        return text.substring(0, end);
+    }
+
+    static java.util.List<String> wrap(Font font, Component component, int width) {
+        var lines = new java.util.ArrayList<String>();
+        String rest = component.getString();
+        while (!rest.isEmpty()) {
+            var line = trim(font, rest, width);
+            if (line.isEmpty()) line = rest.substring(0, Character.charCount(rest.codePointAt(0)));
+            if (line.length() < rest.length() && line.lastIndexOf(' ') > 0) {
+                line = line.substring(0, line.lastIndexOf(' '));
+            }
+            lines.add(line);
+            rest = rest.substring(line.length()).stripLeading();
+        }
+        return lines;
+    }
+}
+''', encoding="utf-8")
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("version")
 parser.add_argument("project", type=Path)
 args = parser.parse_args()
 if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.16.3", "1.16.4", "1.16.5", "1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
     prepare_legacy_style_networking(args.project)
-if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10"}:
+if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.16.3", "1.16.4", "1.16.5", "1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10"}:
     prepare_remapped(args.project)
-    if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
+    if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.16.3", "1.16.4", "1.16.5", "1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
         prepare_legacy_effect_and_chat_apis(args.project)
-    if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8"}:
+    if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.16.3", "1.16.4", "1.16.5", "1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8"}:
         prepare_pre_submit(args.project)
-    if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5"}:
+    if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.16.3", "1.16.4", "1.16.5", "1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5"}:
         prepare_pre_pipeline(args.project)
-    if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
+    if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.16.3", "1.16.4", "1.16.5", "1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
         prepare_legacy_chat_rendering(args.project)
-    if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4"}:
+    if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.16.3", "1.16.4", "1.16.5", "1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4"}:
         prepare_older_texture_constructor(args.project)
-    if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1"}:
+    if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.16.3", "1.16.4", "1.16.5", "1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1"}:
         prepare_entity_based_player_rendering(args.project)
-    if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6"}:
+    if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.16.3", "1.16.4", "1.16.5", "1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6"}:
         for file in (args.project / "src").rglob("*.java"):
             replace_in(file, [
                 ("net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(", "new net.minecraft.resources.ResourceLocation("),
@@ -895,22 +1057,26 @@ if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.
     }
 }
 """, encoding="utf-8")
-    if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1"}:
+    if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.16.3", "1.16.4", "1.16.5", "1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1"}:
         prepare_1201_screen_apis(args.project)
         prepare_legacy_hud_textures(args.project)
-    if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1"}:
+    if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.16.3", "1.16.4", "1.16.5", "1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1"}:
         prepare_legacy_skin(args.project)
-    if args.version.split(".")[1] in {"17", "18", "19"}:
+    if args.version.split(".")[1] in {"15", "16", "17", "18", "19"}:
         prepare_pose_stack_gui(args.project)
-    if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3"}:
+    if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.16.3", "1.16.4", "1.16.5", "1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3"}:
         prepare_pre_1194_gui(args.project)
-    if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2"}:
+    if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.16.3", "1.16.4", "1.16.5", "1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2"}:
         prepare_pre_1193_names(args.project)
         prepare_legacy_fps(args.project)
         prepare_legacy_json(args.project)
-    if args.version.split(".")[1] in {"17", "18"}:
+    if args.version.split(".")[1] in {"15", "16", "17", "18"}:
         prepare_pre_119_text_and_chat(args.project)
-    if args.version in {"1.17", "1.17.1"}:
+    if args.version.split(".")[1] in {"15", "16"}:
+        prepare_116_rendering(args.project)
+    if args.version.startswith("1.15"):
+        prepare_115_gui(args.project)
+    if args.version.split(".")[1] in {"15", "16", "17"}:
         for file in (args.project / "src").rglob("*.java"):
             replace_in(file, [("org.slf4j.LoggerFactory", "org.apache.logging.log4j.LogManager"),
                               ("org.slf4j.Logger", "org.apache.logging.log4j.Logger"),

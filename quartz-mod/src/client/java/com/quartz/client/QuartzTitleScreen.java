@@ -2,7 +2,6 @@ package com.quartz.client;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
@@ -26,11 +25,12 @@ public final class QuartzTitleScreen extends Screen {
         @Override
         protected void init() {
             super.init();
-            addRenderableWidget(Button.builder(QuartzText.of("Switch to Quartz menu", "Wróć do menu Quartz"), button -> {
+            addRenderableWidget(new QuartzButton(QuartzText.of("Switch to Quartz menu", "Wróć do menu Quartz"),
+                    6, 6, 126, 20, false, () -> {
                 QuartzConfig.data.classicMenu = false;
                 QuartzConfig.save();
                 minecraft.setScreen(new QuartzTitleScreen());
-            }).bounds(6, 6, 126, 20).build());
+            }));
         }
     }
 
