@@ -64,6 +64,7 @@ jobs:
           grep -Fx 'com/quartz/client/QuartzHud.class' dist/jar-entries.txt
           grep -Fx 'com/quartz/client/QuartzHudModule.class' dist/jar-entries.txt
           grep -Fx 'com/quartz/client/QuartzHudSettingsScreen.class' dist/jar-entries.txt
+          grep -Fx 'com/quartz/client/QuartzColorPickerScreen.class' dist/jar-entries.txt
           grep -Fx 'com/quartz/client/QuartzPackDetailsScreen.class' dist/jar-entries.txt
           grep -Fx 'com/quartz/client/QuartzPackVersionScreen.class' dist/jar-entries.txt
           grep -Fx 'com/quartz/client/QuartzPackDownloads.class' dist/jar-entries.txt

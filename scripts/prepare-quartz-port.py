@@ -78,17 +78,20 @@ def prepare_pre_submit(root):
         ("key.matchesMouse(event)", "key.matchesMouse(button)"),
         ("super.mouseReleased(event)", "super.mouseReleased(x, y, button)"),
     ])
+    for screen in ("QuartzHudEditorScreen.java", "QuartzColorPickerScreen.java"):
+        replace_in(client / screen, [
+            ("import net.minecraft.client.input.MouseButtonEvent;\n", ""),
+            ("mouseClicked(MouseButtonEvent e, boolean doubleClick)", "mouseClicked(double mx, double my, int mouseButton)"),
+            ("super.mouseClicked(e, doubleClick)", "super.mouseClicked(mx, my, mouseButton)"),
+            ("mouseDragged(MouseButtonEvent e, double dx, double dy)", "mouseDragged(double mx, double my, int mouseButton, double dx, double dy)"),
+            ("super.mouseDragged(e, dx, dy)", "super.mouseDragged(mx, my, mouseButton, dx, dy)"),
+            ("mouseReleased(MouseButtonEvent e)", "mouseReleased(double mx, double my, int mouseButton)"),
+            ("super.mouseReleased(e)", "super.mouseReleased(mx, my, mouseButton)"),
+            ("e.button()", "mouseButton"), ("e.x()", "mx"), ("e.y()", "my"),
+        ])
     replace_in(client / "QuartzHudEditorScreen.java", [
-        ("import net.minecraft.client.input.MouseButtonEvent;\n", ""),
-        ("mouseClicked(MouseButtonEvent e, boolean doubleClick)", "mouseClicked(double mx, double my, int mouseButton)"),
-        ("super.mouseClicked(e, doubleClick)", "super.mouseClicked(mx, my, mouseButton)"),
         ("select(e,", "select(mx, my,"),
         ("select(MouseButtonEvent e,", "select(double mx, double my,"),
-        ("mouseDragged(MouseButtonEvent e, double dx, double dy)", "mouseDragged(double mx, double my, int mouseButton, double dx, double dy)"),
-        ("super.mouseDragged(e, dx, dy)", "super.mouseDragged(mx, my, mouseButton, dx, dy)"),
-        ("mouseReleased(MouseButtonEvent e)", "mouseReleased(double mx, double my, int mouseButton)"),
-        ("super.mouseReleased(e)", "super.mouseReleased(mx, my, mouseButton)"),
-        ("e.button()", "mouseButton"), ("e.x()", "mx"), ("e.y()", "my"),
     ])
     replace_in(client / "QuartzPacksScreen.java", [
         ("mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean doubleClick)", "mouseClicked(double mx, double my, int mouseButton)"),
