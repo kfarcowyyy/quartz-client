@@ -219,7 +219,6 @@ function openNewInstance() {
     <label class="field">Loader
       <select id="n-loader">
         <option value="fabric">Fabric (mody)</option>
-        <option value="quilt">Quilt (mody)</option>
         <option value="vanilla">Vanilla (bez modów)</option>
       </select>
     </label>

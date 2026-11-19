@@ -27,7 +27,7 @@ function get(id) {
 
 async function create({ name, mcVersion, loader = 'vanilla' }) {
   if (!name || !mcVersion) throw new Error('Podaj nazwę i wersję');
-  if (!['vanilla', 'fabric', 'quilt'].includes(loader)) {
+  if (!['vanilla', 'fabric'].includes(loader)) {
     throw new Error('Ten loader dojdzie w etapie 2 (Forge/NeoForge)');
   }
   await versions.assertCreatable(mcVersion);

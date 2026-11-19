@@ -4,9 +4,9 @@ const { randomUUID } = require('node:crypto');
 const paths = require('./paths');
 
 function bundledFiles({ loader, mcVersion }) {
-  if (!['fabric', 'quilt'].includes(loader)) return false;
+  if (!loader === 'fabric') return false;
   if (!/^(?:1\.(?:1[5-9]|2[01])(?:\.\d+)?|26\.\d+(?:\.\d+)?)$/.test(mcVersion)) return false;
-  const root = path.join(__dirname, '..', 'quartz-mods', loader, mcVersion);
+  const root = path.join(__dirname, '..', 'quartz-mods', 'fabric', mcVersion);
   const sources = ['quartz-client.jar', 'fabric-api.jar'].map((name) => path.join(root, name));
   return sources.every(file => fs.existsSync(file)) ? sources : null;
 }
