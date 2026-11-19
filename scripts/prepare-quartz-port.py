@@ -194,8 +194,17 @@ def prepare_entity_based_player_rendering(root):
             ("net/minecraft/client/renderer/entity/state/PlayerRenderState", "net/minecraft/client/player/AbstractClientPlayer"),
             ("PlayerRenderState", "AbstractClientPlayer"),
             ("state.id", "state.getId()"),
+            ("net.minecraft.client.renderer.RenderType::guiTextured, ", ""),
             ("RenderType::guiTextured, ", ""),
         ])
+    replace_in(client / "QuartzShotPreview.java", [("id, left, top, 0f, 0f, w, h,", "id, left, top, w, h, 0f, 0f,")])
+    replace_in(client / "QuartzWardrobeScreen.java", [("index * 64, 0, 24, 24, 64, 64, 384, 64", "24, 24, index * 64, 0, 64, 64, 384, 64")])
+    replace_in(client / "QuartzTheme.java", [("CRYSTAL, x, y, 0, 0, width, height,", "CRYSTAL, x, y, width, height, 0, 0,")])
+    replace_in(client / "QuartzPackImages.java", [("0, 0, tw, th, picture.width", "tw, th, 0, 0, picture.width")])
+    replace_in(client / "QuartzHud.java", [
+        ("HOTBAR_TEXTURE, 0, 0, 0, 0,\n                    interior, ARMOR_THICKNESS,", "HOTBAR_TEXTURE, 0, 0, interior, ARMOR_THICKNESS,\n                    0, 0,"),
+        ("HOTBAR_TEXTURE, interior, 0, 181, 0,\n                    1, ARMOR_THICKNESS,", "HOTBAR_TEXTURE, interior, 0, 1, ARMOR_THICKNESS,\n                    181, 0,"),
+    ])
     replace_in(client / "QuartzStyleLayer.java", [
         ("RenderLayer<AbstractClientPlayer, PlayerModel>", "RenderLayer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>>"),
         ("RenderLayerParent<AbstractClientPlayer, PlayerModel>", "RenderLayerParent<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>>"),
@@ -292,15 +301,15 @@ parser = argparse.ArgumentParser()
 parser.add_argument("version")
 parser.add_argument("project", type=Path)
 args = parser.parse_args()
-if args.version in {"1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.8", "1.21.9", "1.21.10"}:
+if args.version in {"1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.8", "1.21.9", "1.21.10"}:
     prepare_remapped(args.project)
-    if args.version in {"1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.8"}:
+    if args.version in {"1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.8"}:
         prepare_pre_submit(args.project)
-    if args.version in {"1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5"}:
+    if args.version in {"1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5"}:
         prepare_pre_pipeline(args.project)
-    if args.version in {"1.21.1", "1.21.2", "1.21.3", "1.21.4"}:
+    if args.version in {"1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4"}:
         prepare_older_texture_constructor(args.project)
-    if args.version == "1.21.1":
+    if args.version in {"1.20.6", "1.21", "1.21.1"}:
         prepare_entity_based_player_rendering(args.project)
 elif args.version in {"26.1", "26.1.1", "26.1.2", "26.2"}:
     prepare_named(args.project)
