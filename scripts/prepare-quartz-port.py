@@ -579,27 +579,175 @@ def prepare_legacy_hud_textures(root):
     ])
 
 
+def prepare_pose_stack_gui(root):
+    client = root / "src/client/java/com/quartz/client"
+    chat = client / "mixin/QuartzChatMixin.java"
+    for file in client.rglob("*.java"):
+        if file == chat:
+            continue
+        replace_in(file, [
+            ("import net.minecraft.client.gui.GuiGraphics;\n", ""),
+            ("net.minecraft.client.gui.GuiGraphics", "QuartzGraphics"),
+            ("GuiGraphics", "QuartzGraphics"),
+        ])
+    safe = client / "QuartzSafeScreen.java"
+    replace_in(safe, [
+        ("renderBackground(QuartzGraphics graphics)", "renderBackground(com.mojang.blaze3d.vertex.PoseStack matrices)"),
+        ("render(QuartzGraphics graphics, int mouseX, int mouseY, float delta) {",
+         "render(com.mojang.blaze3d.vertex.PoseStack matrices, int mouseX, int mouseY, float delta) {\n"
+         "        QuartzGraphics graphics = new QuartzGraphics(matrices);"),
+        ("super.render(graphics, mouseX, mouseY, delta)", "super.render(graphics.pose(), mouseX, mouseY, delta)"),
+    ])
+    replace_in(client / "QuartzTitleScreen.java", [
+        ("renderBackground(QuartzGraphics g)", "renderBackground(com.mojang.blaze3d.vertex.PoseStack matrices)"),
+        ("render(QuartzGraphics g, int mouseX, int mouseY, float delta) {",
+         "render(com.mojang.blaze3d.vertex.PoseStack matrices, int mouseX, int mouseY, float delta) {\n"
+         "        QuartzGraphics g = new QuartzGraphics(matrices);"),
+        ("super.render(g, mouseX, mouseY, delta)", "super.render(matrices, mouseX, mouseY, delta)"),
+    ])
+    replace_in(client / "QuartzButton.java", [
+        ("renderWidget(QuartzGraphics g, int mouseX, int mouseY, float delta) {",
+         "renderWidget(com.mojang.blaze3d.vertex.PoseStack matrices, int mouseX, int mouseY, float delta) {\n"
+         "        QuartzGraphics g = new QuartzGraphics(matrices);"),
+    ])
+    replace_in(client / "QuartzWardrobeScreen.java", [
+        ("g, (x + left + span) / 2, bottom - 8", "g.pose(), (x + left + span) / 2, bottom - 8"),
+    ])
+    replace_in(client / "QuartzModClient.java", [
+        ("HudRenderCallback.EVENT.register((graphics, tickCounter) -> {",
+         "HudRenderCallback.EVENT.register((matrices, tickCounter) -> {\n"
+         "            QuartzGraphics graphics = new QuartzGraphics(matrices);"),
+    ])
+    replace_in(chat, [
+        ("net.minecraft.client.gui.GuiGraphics", "com.mojang.blaze3d.vertex.PoseStack"),
+        ("net/minecraft/client/gui/GuiGraphics", "com/mojang/blaze3d/vertex/PoseStack"),
+        ("GuiGraphics graphics", "PoseStack graphics"),
+        ("var pose = graphics.pose();", "var pose = graphics;"),
+    ])
+    (client / "QuartzGraphics.java").write_text('''package com.quartz.client;
+
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiComponent;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.FormattedCharSequence;
+import net.minecraft.world.item.ItemStack;
+
+final class QuartzGraphics extends GuiComponent {
+    private final Minecraft minecraft = Minecraft.getInstance();
+    private final PoseStack pose;
+
+    QuartzGraphics(PoseStack pose) {
+        this.pose = pose;
+    }
+
+    PoseStack pose() { return pose; }
+    int guiWidth() { return minecraft.getWindow().getGuiScaledWidth(); }
+    int guiHeight() { return minecraft.getWindow().getGuiScaledHeight(); }
+
+    void fill(int x, int y, int right, int bottom, int color) {
+        GuiComponent.fill(pose, x, y, right, bottom, color);
+    }
+
+    void fillGradient(int x, int y, int right, int bottom, int topColor, int bottomColor) {
+        super.fillGradient(pose, x, y, right, bottom, topColor, bottomColor);
+    }
+
+    void drawString(Font font, String text, int x, int y, int color, boolean shadow) {
+        if (shadow) font.drawShadow(pose, text, x, y, color);
+        else font.draw(pose, text, x, y, color);
+    }
+
+    void drawString(Font font, Component text, int x, int y, int color, boolean shadow) {
+        if (shadow) font.drawShadow(pose, text, x, y, color);
+        else font.draw(pose, text, x, y, color);
+    }
+
+    void drawString(Font font, FormattedCharSequence text, int x, int y, int color, boolean shadow) {
+        if (shadow) font.drawShadow(pose, text, x, y, color);
+        else font.draw(pose, text, x, y, color);
+    }
+
+    void drawCenteredString(Font font, Component text, int x, int y, int color) {
+        drawString(font, text, x - font.width(text) / 2, y, color, true);
+    }
+
+    void drawCenteredString(Font font, String text, int x, int y, int color) {
+        drawString(font, text, x - font.width(text) / 2, y, color, true);
+    }
+
+    void renderItem(ItemStack item, int x, int y) {
+        minecraft.getItemRenderer().renderAndDecorateItem(pose, item, x, y);
+    }
+
+    private static void beginTexture(ResourceLocation texture) {
+        RenderSystem.setShaderTexture(0, texture);
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+    }
+
+    void blit(ResourceLocation texture, int x, int y, int u, int v, int width, int height) {
+        blit(texture, x, y, width, height, u, v, width, height, 256, 256);
+    }
+
+    void blit(ResourceLocation texture, int x, int y, int width, int height, float u, float v,
+              int regionWidth, int regionHeight, int textureWidth, int textureHeight) {
+        beginTexture(texture);
+        try {
+            GuiComponent.blit(pose, x, y, width, height, u, v, regionWidth, regionHeight, textureWidth, textureHeight);
+        } finally {
+            RenderSystem.disableBlend();
+        }
+    }
+
+    void blit(int x, int y, int z, int width, int height, TextureAtlasSprite sprite) {
+        beginTexture(sprite.atlasLocation());
+        try {
+            GuiComponent.blit(pose, x, y, z, width, height, sprite);
+        } finally {
+            RenderSystem.disableBlend();
+        }
+    }
+
+    void enableScissor(int x, int y, int right, int bottom) {
+        var window = minecraft.getWindow();
+        double scale = window.getGuiScale();
+        RenderSystem.enableScissor((int) (x * scale), window.getHeight() - (int) (bottom * scale),
+                (int) ((right - x) * scale), (int) ((bottom - y) * scale));
+    }
+
+    void disableScissor() {
+        RenderSystem.disableScissor();
+    }
+}
+''', encoding="utf-8")
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("version")
 parser.add_argument("project", type=Path)
 args = parser.parse_args()
 if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.16.3", "1.16.4", "1.16.5", "1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
     prepare_legacy_style_networking(args.project)
-if args.version in {"1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10"}:
+if args.version in {"1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10"}:
     prepare_remapped(args.project)
-    if args.version in {"1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
+    if args.version in {"1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
         prepare_legacy_effect_and_chat_apis(args.project)
-    if args.version in {"1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8"}:
+    if args.version in {"1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8"}:
         prepare_pre_submit(args.project)
-    if args.version in {"1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5"}:
+    if args.version in {"1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5"}:
         prepare_pre_pipeline(args.project)
-    if args.version in {"1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
+    if args.version in {"1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
         prepare_legacy_chat_rendering(args.project)
-    if args.version in {"1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4"}:
+    if args.version in {"1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4"}:
         prepare_older_texture_constructor(args.project)
-    if args.version in {"1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1"}:
+    if args.version in {"1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1"}:
         prepare_entity_based_player_rendering(args.project)
-    if args.version in {"1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6"}:
+    if args.version in {"1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6"}:
         for file in (args.project / "src").rglob("*.java"):
             replace_in(file, [
                 ("net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(", "new net.minecraft.resources.ResourceLocation("),
@@ -622,11 +770,13 @@ if args.version in {"1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1
     }
 }
 """, encoding="utf-8")
-    if args.version in {"1.20", "1.20.1"}:
+    if args.version in {"1.19.4", "1.20", "1.20.1"}:
         prepare_1201_screen_apis(args.project)
         prepare_legacy_hud_textures(args.project)
-    if args.version in {"1.20", "1.20.1"}:
+    if args.version in {"1.19.4", "1.20", "1.20.1"}:
         prepare_legacy_skin(args.project)
+    if args.version == "1.19.4":
+        prepare_pose_stack_gui(args.project)
     if args.version == "1.20.5":
         replace_in(args.project / "src/main/java/com/quartz/QuartzServerStyle.java", [
             ("context.server()", "context.player().server"),

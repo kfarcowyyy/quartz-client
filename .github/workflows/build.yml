@@ -84,15 +84,16 @@ jobs:
           cp "$jar" "dist/Quartz-Client-Mod-${{ matrix.target.id }}.jar"
           ls -lh dist
       - name: Launch Minecraft to its main menu
-        if: matrix.target.port
         shell: bash
+        env:
+          QUARTZ_SMOKE_TEST: "1"
         run: |
           log="$RUNNER_TEMP/quartz-launch.log"
           setsid xvfb-run -a gradle -p ${{ matrix.target.project }} -Pminecraft_version=${{ matrix.target.id }} -Pfabric_api_version=${{ matrix.target.api }} runClient > "$log" 2>&1 &
           game=$!
           trap 'kill -TERM -- "-$game" 2>/dev/null || true' EXIT
           for i in {1..76}; do
-            if grep -q 'Created: .*minecraft:textures/atlas/gui.png-atlas' "$log"; then
+            if grep -q 'Quartz Client smoke test: menu rendered' "$log"; then
               sleep 5
               if kill -0 "$game" 2>/dev/null && ! grep -qiE 'Game crashed|MixinApplyError|Critical injection failure' "$log"; then
                 echo "Minecraft ${{ matrix.target.id }} reached the main menu"
@@ -111,7 +112,7 @@ jobs:
           if-no-files-found: error
   windows:
     runs-on: windows-latest
-    needs: build-mod
+    needs: [targets, build-mod]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -123,7 +124,11 @@ jobs:
           path: downloaded-mods
       - name: Bundle Fabric builds and their dependencies
         shell: bash
+        env:
+          QUARTZ_TARGETS: ${{ needs.targets.outputs.matrix }}
         run: |
+          set -euo pipefail
+          node -e "const targets = JSON.parse(process.env.QUARTZ_TARGETS); if (!targets.length) throw new Error('No Quartz versions generated'); require('fs').writeFileSync('src/quartz-build-targets.json', JSON.stringify(targets, null, 2) + '\n')"
           node -p "require('./src/quartz-build-targets.json').map(({id,api}) => id+' '+api).join('\n')" |
           while read -r mc api; do
             folder="quartz-mods/fabric/$mc"
