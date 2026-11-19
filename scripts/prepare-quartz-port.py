@@ -466,12 +466,27 @@ def prepare_legacy_effect_and_chat_apis(root):
         ("effect.getEffect().unwrapKey()",
          "net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT.getKey(effect.getEffect())"),
         ("key.isEmpty() || !effect.showIcon()", "key == null || !effect.showIcon()"),
-        ('key.get().identifier().withPrefix("mob_effect/")',
-         'new net.minecraft.resources.ResourceLocation("mob_effect", key.getPath())'),
+        ('key.get().location().withPrefix("mob_effect/")',
+         'new ResourceLocation(key.getNamespace(), "mob_effect/" + key.getPath())'),
     ])
-    replace_in(client / "mixin/QuartzChatMixin.java", [
-        ("((ChatComponent) (Object) this).isChatFocused()",
-         "net.minecraft.client.Minecraft.getInstance().screen instanceof net.minecraft.client.gui.screens.ChatScreen"),
+
+
+def prepare_legacy_chat_rendering(root):
+    chat = root / "src/client/java/com/quartz/client/mixin/QuartzChatMixin.java"
+    replace_in(chat, [
+        ("import net.minecraft.client.GuiMessage;\n", ""),
+        ('@Inject(method = "addMessageToQueue", at = @At("TAIL"))',
+         '@Inject(method = "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;ILnet/minecraft/client/GuiMessageTag;Z)V", at = @At("TAIL"))'),
+        ("GuiMessage message, CallbackInfo callback",
+         "net.minecraft.network.chat.Component message, net.minecraft.network.chat.MessageSignature signature, int tick, net.minecraft.client.GuiMessageTag tag, boolean refresh, CallbackInfo callback"),
+        ("if (!QuartzConfig.data.smoothChat || ((ChatComponent) (Object) this).isChatFocused()) return;",
+         "if (refresh || !QuartzConfig.data.smoothChat || net.minecraft.client.Minecraft.getInstance().screen instanceof net.minecraft.client.gui.screens.ChatScreen) return;"),
+        ("quartz$arrivals.putIfAbsent(message.addedTime(), now);", "quartz$arrivals.putIfAbsent(tick, now);"),
+        (";IIIZ)V", ";III)V"),
+        ("boolean focused, Operation<Void> original", "Operation<Void> original"),
+        ("if (focused || !QuartzConfig.data.smoothChat",
+         "if (net.minecraft.client.Minecraft.getInstance().screen instanceof net.minecraft.client.gui.screens.ChatScreen || !QuartzConfig.data.smoothChat"),
+        ("graphics, tick, mouseX, mouseY, focused", "graphics, tick, mouseX, mouseY"),
     ])
 
 
@@ -486,24 +501,82 @@ def prepare_1201_screen_apis(root):
     replace_in(client / "QuartzTitleScreen.java", [
         ("renderBackground(GuiGraphics g, int x, int y, float delta)", "renderBackground(GuiGraphics g)"),
     ])
-    replace_in(client / "QuartzWardrobeScreen.java", [
-        ("            if (player != null) net.minecraft.client.gui.screens.inventory.InventoryScreen.renderEntityInInventoryFollowsMouse(\n"
-         "                    g, x + 3, y + 5, left + span - 3, bottom - 3, Math.max(14, Math.min(32, (bottom - y) / 3)), 0, mx, my, player);",
-         ""),
+    replace_in(client / "QuartzSafeScreen.java", [
+        ("renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float delta)",
+         "renderBackground(GuiGraphics graphics)"),
     ])
+    replace_in(client / "QuartzWardrobeScreen.java", [
+        ("g, x + 3, y + 5, left + span - 3, bottom - 3, Math.max(14, Math.min(32, (bottom - y) / 3)), 0, mx, my, player);",
+         "g, (x + left + span) / 2, bottom - 8, Math.max(14, Math.min(32, (bottom - y) / 3)),\n"
+         "                    (x + left + span) / 2f - mx, (y + bottom) / 2f - my, player);"),
+    ])
+
+
+def prepare_legacy_skin(root):
+    client = root / "src/client/java/com/quartz/client"
     wardrobe = client / "QuartzWardrobe.java"
     source = wardrobe.read_text(encoding="utf-8")
-    source = source.replace("import net.minecraft.core.ClientAsset;\n", "")
-    source = source.replace("import net.minecraft.world.entity.player.PlayerModelType;\n", "")
-    source = source.replace("import net.minecraft.world.entity.player.PlayerSkin;\n", "")
-    source = source.replace("    private static PlayerModelType model = PlayerModelType.WIDE;\n", "")
-    source = source.replace("            model = id.endsWith(\"-slim\") ? PlayerModelType.SLIM : PlayerModelType.WIDE;\n", "")
-    source = re.sub(r"\n    public static PlayerSkin apply\(PlayerSkin account\) \{.*?\n    \}\n}", "\n}", source, flags=re.S)
-    wardrobe.write_text(source, encoding="utf-8")
-    (client / "mixin/QuartzPlayerSkinMixin.java").write_text(
-        "package com.quartz.client.mixin;\n", encoding="utf-8")
-    mixins = root / "src/client/resources/quartz.client.mixins.json"
-    replace_in(mixins, [(', "QuartzPlayerSkinMixin"', '')])
+    source = source.replace("import net.minecraft.client.resources.PlayerSkin;\n", "")
+    source = source.replace("PlayerSkin.Model model = PlayerSkin.Model.WIDE", 'String model = "default"')
+    source = source.replace('id.endsWith("-slim") ? PlayerSkin.Model.SLIM : PlayerSkin.Model.WIDE',
+                            'id.endsWith("-slim") ? "slim" : "default"')
+    start = source.index("    public static PlayerSkin apply(")
+    wardrobe.write_text(source[:start] + '''    public static ResourceLocation importedTexture() {
+        return registered ? TEXTURE : null;
+    }
+
+    public static String importedModel() {
+        return registered ? model : null;
+    }
+}
+''', encoding="utf-8")
+    (client / "mixin/QuartzPlayerSkinMixin.java").write_text('''package com.quartz.client.mixin;
+
+import com.quartz.client.QuartzWardrobe;
+import net.minecraft.client.player.AbstractClientPlayer;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.resources.ResourceLocation;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+
+@Mixin(AbstractClientPlayer.class)
+public abstract class QuartzPlayerSkinMixin {
+    @Inject(method = "getSkinTextureLocation", at = @At("RETURN"), cancellable = true)
+    private void quartz$applyTexture(CallbackInfoReturnable<ResourceLocation> result) {
+        if (!((Object) this instanceof LocalPlayer)) return;
+        ResourceLocation texture = QuartzWardrobe.importedTexture();
+        if (texture != null) result.setReturnValue(texture);
+    }
+
+    @Inject(method = "getModelName", at = @At("RETURN"), cancellable = true)
+    private void quartz$applyModel(CallbackInfoReturnable<String> result) {
+        if (!((Object) this instanceof LocalPlayer)) return;
+        String model = QuartzWardrobe.importedModel();
+        if (model != null) result.setReturnValue(model);
+    }
+}
+''', encoding="utf-8")
+
+
+def prepare_legacy_hud_textures(root):
+    replace_in(root / "src/client/java/com/quartz/client/QuartzHud.java", [
+        ("textures/gui/sprites/hud/hotbar.png", "textures/gui/widgets.png"),
+        ("182, 22);", "256, 256);"),
+        ('new ResourceLocation("minecraft", "container/slot/helmet")', "net.minecraft.world.inventory.InventoryMenu.EMPTY_ARMOR_SLOT_HELMET"),
+        ('new ResourceLocation("minecraft", "container/slot/chestplate")', "net.minecraft.world.inventory.InventoryMenu.EMPTY_ARMOR_SLOT_CHESTPLATE"),
+        ('new ResourceLocation("minecraft", "container/slot/leggings")', "net.minecraft.world.inventory.InventoryMenu.EMPTY_ARMOR_SLOT_LEGGINGS"),
+        ('new ResourceLocation("minecraft", "container/slot/boots")', "net.minecraft.world.inventory.InventoryMenu.EMPTY_ARMOR_SLOT_BOOTS"),
+        ("g.blitSprite(cell.icon(), left, top, 16, 16);",
+         "g.blit(left, top, 0, 16, 16, client.getTextureAtlas(net.minecraft.world.inventory.InventoryMenu.BLOCK_ATLAS).apply(cell.icon()));"),
+        ('g.blitSprite(new ResourceLocation("minecraft", "hud/armor_" + sprite), x + 1 + i * 9, y + 1, 9, 9);',
+         'g.blit(new ResourceLocation("minecraft", "textures/gui/icons.png"), x + 1 + i * 9, y + 1,\n'
+         '                        "full".equals(sprite) ? 34 : "half".equals(sprite) ? 25 : 16, 9, 9, 9);'),
+        ("g.blitSprite(cell.icon(), left + 9, top + 5, 16, 16);",
+         'g.blit(new ResourceLocation(cell.icon().getNamespace(), "textures/" + cell.icon().getPath() + ".png"),\n'
+         '                        left + 9, top + 5, 16, 16, 0, 0, 18, 18, 18, 18);'),
+    ])
 
 
 parser = argparse.ArgumentParser()
@@ -512,21 +585,21 @@ parser.add_argument("project", type=Path)
 args = parser.parse_args()
 if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.16.3", "1.16.4", "1.16.5", "1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
     prepare_legacy_style_networking(args.project)
-if args.version in {"1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10"}:
+if args.version in {"1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10"}:
     prepare_remapped(args.project)
-    if args.version in {"1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
+    if args.version in {"1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
         prepare_legacy_effect_and_chat_apis(args.project)
-    if args.version == "1.20.1":
-        prepare_1201_screen_apis(args.project)
-    if args.version in {"1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8"}:
+    if args.version in {"1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8"}:
         prepare_pre_submit(args.project)
-    if args.version in {"1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5"}:
+    if args.version in {"1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5"}:
         prepare_pre_pipeline(args.project)
-    if args.version in {"1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4"}:
+    if args.version in {"1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
+        prepare_legacy_chat_rendering(args.project)
+    if args.version in {"1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4"}:
         prepare_older_texture_constructor(args.project)
-    if args.version in {"1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1"}:
+    if args.version in {"1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1"}:
         prepare_entity_based_player_rendering(args.project)
-    if args.version in {"1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6"}:
+    if args.version in {"1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6"}:
         for file in (args.project / "src").rglob("*.java"):
             replace_in(file, [
                 ("net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(", "new net.minecraft.resources.ResourceLocation("),
@@ -549,6 +622,11 @@ if args.version in {"1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", 
     }
 }
 """, encoding="utf-8")
+    if args.version in {"1.20", "1.20.1"}:
+        prepare_1201_screen_apis(args.project)
+        prepare_legacy_hud_textures(args.project)
+    if args.version in {"1.20", "1.20.1"}:
+        prepare_legacy_skin(args.project)
     if args.version == "1.20.5":
         replace_in(args.project / "src/main/java/com/quartz/QuartzServerStyle.java", [
             ("context.server()", "context.player().server"),
