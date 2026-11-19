@@ -13,6 +13,7 @@ const ICONS = {
   trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
   folder: '<path d="M3 6h6l2 2h10v11H3z"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  sparkle: '<path d="M12 2l2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5z"/>',
 };
 const icon = (n, s = 20) =>
   `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[n]}</svg>`;
@@ -34,6 +35,7 @@ const state = {
   status: '',
   progress: 0,
   playing: false,
+  detail: { id: null, tab: 'all', items: null, q: '', rows: [] },
   browse: { provider: 'modrinth', type: 'mod', query: '', results: [], loading: false },
 };
 
@@ -49,6 +51,7 @@ const PAGES = [
   ['play', 'Graj', 'play'],
   ['instances', 'Instancje', 'box'],
   ['browse', 'Przeglądaj', 'search'],
+  ['cosmetics', 'Kosmetyki', 'sparkle'],
   ['account', 'Konto', 'user'],
   ['settings', 'Ustawienia', 'gear'],
 ];
@@ -56,7 +59,7 @@ const PAGES = [
 function renderNav() {
   $('#nav').innerHTML = PAGES.map(
     ([id, label, ic]) =>
-      `<button class="nav-btn ${state.page === id ? 'active' : ''}" data-page="${id}">${icon(ic)}${label}</button>`
+      `<button class="nav-btn ${state.page === id || (state.page === 'instance' && id === 'instances') ? 'active' : ''}" data-page="${id}">${icon(ic)}${label}</button>`
   ).join('');
   $('#nav').querySelectorAll('button').forEach((b) =>
     b.addEventListener('click', () => go(b.dataset.page))
@@ -146,7 +149,7 @@ function viewInstances() {
   return `
   <div class="page">
     <div class="row" style="margin-bottom:18px">
-      <div class="grow"><h1>Instancje</h1><p class="sub" style="margin:0">Każda instancja to osobny świat modów i ustawień.</p></div>
+      <div class="grow"><h1>Instancje</h1><p class="sub" style="margin:0">Kliknij instancję, żeby zarządzać modami, resourcepackami i shaderami.</p></div>
       <button class="btn primary" id="new-inst">${icon('plus')} Nowa instancja</button>
     </div>
     ${state.instances.length ? `<div class="grid">${cards}</div>` : '<div class="empty">Brak instancji - utwórz pierwszą.</div>'}
@@ -156,10 +159,7 @@ function viewInstances() {
 function bindInstances() {
   $('#new-inst').addEventListener('click', openNewInstance);
   document.querySelectorAll('.inst').forEach((c) =>
-    c.addEventListener('click', () => {
-      state.selected = c.dataset.id;
-      render();
-    })
+    c.addEventListener('click', () => openDetail(c.dataset.id))
   );
   document.querySelectorAll('[data-open]').forEach((b) =>
     b.addEventListener('click', (e) => { e.stopPropagation(); api('instances:open', b.dataset.open); })
@@ -345,9 +345,9 @@ function viewAccount() {
     <h1>Konto</h1>
     <p class="sub">${a ? `Zalogowano jako <b>${esc(a.name)}</b> (${a.type === 'microsoft' ? 'Microsoft' : 'offline'})` : 'Wybierz sposób logowania.'}</p>
     <section class="card">
-      <h3>Konto Microsoft (premium)</h3>
-      <p class="sub" style="margin-bottom:14px">Pełne wejście na serwery premium.</p>
-      <button class="btn primary" id="ms-login">Zaloguj przez Microsoft</button>
+      <h3>Konto Microsoft / Xbox (premium)</h3>
+      <p class="sub" style="margin-bottom:14px">Logowanie kontem Xbox lub Microsoft - to to samo konto. Pełne wejście na serwery premium.</p>
+      <button class="btn primary" id="ms-login">Zaloguj przez Xbox / Microsoft</button>
     </section>
     <section class="card">
       <h3>Tryb offline</h3>
@@ -364,7 +364,11 @@ function viewAccount() {
 function bindAccount() {
   $('#ms-login').addEventListener('click', async (e) => {
     e.target.disabled = true;
-    try { state.account = await api('auth:microsoft'); toast('Zalogowano'); }
+    try {
+      const previous = state.account;
+      state.account = await api('auth:microsoft');
+      if (state.account && state.account.uuid !== previous?.uuid) toast('Zalogowano');
+    }
     catch (err) { toast(err.message, true); }
     renderNav(); render();
   });
@@ -385,6 +389,12 @@ function viewSettings() {
     <h1>Ustawienia</h1>
     <p class="sub">Zapisują się automatycznie.</p>
     <section class="card">
+      <label class="field">Language / Język
+        <select id="s-lang">
+          <option value="en">English</option>
+          <option value="pl">Polski</option>
+        </select>
+      </label>
       <label class="field">Pamięć RAM: <b id="ram-val">${s.ram} MB</b>
         <input type="range" id="ram" min="1024" max="16384" step="512" value="${s.ram}" />
       </label>
@@ -411,15 +421,195 @@ function bindSettings() {
   $('#s-opt').addEventListener('change', (e) => save({ optimize: e.target.checked }));
   $('#s-cf').addEventListener('change', (e) => save({ curseforgeKey: e.target.value.trim() }));
   $('#s-java').addEventListener('change', (e) => save({ javaPath: e.target.value.trim() }));
+  $('#s-lang').value = state.settings.language || 'en';
+  $('#s-lang').addEventListener('change', async (e) => {
+    try {
+      await save({ language: e.target.value });
+      quartzI18n.setLanguage(state.settings.language);
+      renderNav();
+      render();
+    } catch (error) { toast(error.message, true); }
+  });
+}
+
+/* ---------- SZCZEGÓŁY INSTANCJI ---------- */
+const KIND_LABEL = { mods: 'Mods', resourcepacks: 'Resourcepacks', shaders: 'Shaders' };
+const KIND_BROWSE = { mods: 'mod', resourcepacks: 'resourcepack', shaders: 'shader' };
+
+const fmtSize = (b) =>
+  b == null ? 'folder' : b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
+
+async function openDetail(id) {
+  state.selected = id;
+  state.detail = { id, tab: 'all', items: null, q: '', rows: [] };
+  state.page = 'instance';
+  renderNav();
+  render();
+  await loadDetail();
+}
+
+async function loadDetail(partial) {
+  try {
+    state.detail.items = await api('content:list', state.detail.id);
+  } catch (e) {
+    toast(e.message, true);
+    state.detail.items = { mods: [], resourcepacks: [], shaders: [] };
+  }
+  if (state.page !== 'instance') return;
+  if (partial) {
+    $('#files').innerHTML = fileRowsHtml(false);
+    bindFiles();
+  } else {
+    render();
+  }
+}
+
+function detailRows() {
+  const d = state.detail;
+  if (!d.items) return [];
+  const kinds = d.tab === 'all' ? Object.keys(KIND_LABEL) : [d.tab];
+  const q = d.q.trim().toLowerCase();
+  return kinds
+    .flatMap((k) => d.items[k].map((it) => ({ ...it, kind: k })))
+    .filter((it) => !q || it.title.toLowerCase().includes(q));
+}
+
+function fileRowsHtml(animate) {
+  const d = state.detail;
+  if (!d.items) return '<div class="empty">Wczytuję...</div>';
+  d.rows = detailRows();
+  if (!d.rows.length) {
+    return `<div class="empty">${d.q ? 'Nic nie znaleziono.' : 'Tu jeszcze nic nie ma. Dodaj plik albo znajdź coś online.'}</div>`;
+  }
+  return d.rows
+    .map(
+      (it, i) => `
+    <div class="file ${it.enabled ? '' : 'off'} ${animate ? '' : 'no-anim'}" style="animation-delay:${animate ? Math.min(i, 14) * 22 : 0}ms">
+      <div class="fi k-${it.kind}">${KIND_LABEL[it.kind][0]}</div>
+      <div class="meta">
+        <div class="t">${esc(it.title)}</div>
+        <div class="s">${KIND_LABEL[it.kind]} · ${fmtSize(it.size)}${it.enabled ? '' : ' · wyłączony'}</div>
+      </div>
+      <label class="switch"><input type="checkbox" data-sw="${i}" ${it.enabled ? 'checked' : ''} /><span></span></label>
+      <button class="btn sm danger" data-rm="${i}">${icon('trash', 16)}</button>
+    </div>`
+    )
+    .join('');
+}
+
+function viewInstance() {
+  const d = state.detail;
+  const inst = state.instances.find((i) => i.id === d.id);
+  if (!inst) return '<div class="page"><div class="empty">Nie znaleziono instancji.</div></div>';
+  const n = (k) => (d.items ? d.items[k].length : 0);
+  const tabs = [
+    ['all', 'Wszystko', n('mods') + n('resourcepacks') + n('shaders')],
+    ['mods', 'Mods', n('mods')],
+    ['resourcepacks', 'Resourcepacks', n('resourcepacks')],
+    ['shaders', 'Shaders', n('shaders')],
+  ]
+    .map(([id, label, c]) => `<button class="tab ${d.tab === id ? 'active' : ''}" data-tab="${id}">${label} <span class="count">${c}</span></button>`)
+    .join('');
+  return `
+  <div class="page">
+    <button class="btn sm" id="back">&larr; Instancje</button>
+    <div class="row" style="margin:16px 0 18px">
+      <div class="grow">
+        <h1>${esc(inst.name)}</h1>
+        <span class="tag">${esc(inst.mcVersion)}</span><span class="tag pink">${esc(inst.loader)}</span>
+      </div>
+      <button class="btn" id="d-folder">${icon('folder', 18)} Otwórz folder</button>
+      <button class="btn primary" id="d-play">${icon('play', 18)} Graj</button>
+    </div>
+    <div class="tabs">${tabs}</div>
+    <div class="row" style="margin-bottom:14px">
+      <input id="fq" class="grow" placeholder="Szukaj w plikach..." value="${esc(d.q)}" />
+      ${d.tab !== 'all' ? `<button class="btn" id="d-add">${icon('plus', 18)} Dodaj plik</button><button class="btn" id="d-find">${icon('search', 18)} Znajdź online</button>` : ''}
+    </div>
+    <div id="files">${fileRowsHtml(true)}</div>
+  </div>`;
+}
+
+function bindFiles() {
+  const d = state.detail;
+  document.querySelectorAll('[data-sw]').forEach((cb) =>
+    cb.addEventListener('change', async () => {
+      const it = d.rows[Number(cb.dataset.sw)];
+      try {
+        await api('content:toggle', d.id, it.kind, it.name);
+        await loadDetail(true);
+      } catch (e) {
+        toast(e.message, true);
+      }
+    })
+  );
+  document.querySelectorAll('[data-rm]').forEach((b) =>
+    b.addEventListener('click', async () => {
+      const it = d.rows[Number(b.dataset.rm)];
+      if (!confirm(`Usunąć "${it.title}"?`)) return;
+      try {
+        await api('content:delete', d.id, it.kind, it.name);
+        await loadDetail();
+      } catch (e) {
+        toast(e.message, true);
+      }
+    })
+  );
+}
+
+function bindInstance() {
+  const d = state.detail;
+  const back = $('#back');
+  if (!back) return;
+  back.addEventListener('click', () => go('instances'));
+  document.querySelectorAll('[data-tab]').forEach((t) =>
+    t.addEventListener('click', () => {
+      d.tab = t.dataset.tab;
+      render();
+    })
+  );
+  const q = $('#fq');
+  q.addEventListener('input', () => {
+    d.q = q.value;
+    $('#files').innerHTML = fileRowsHtml(false);
+    bindFiles();
+  });
+  $('#d-folder').addEventListener('click', () =>
+    api('instances:open', d.id, d.tab === 'all' ? undefined : d.tab).catch((e) => toast(e.message, true))
+  );
+  $('#d-play').addEventListener('click', () => {
+    state.selected = d.id;
+    go('play');
+  });
+  const add = $('#d-add');
+  if (add) {
+    add.addEventListener('click', async () => {
+      try {
+        const n = await api('content:import', d.id, d.tab);
+        if (n) toast(`Dodano plików: ${n}`);
+        await loadDetail();
+      } catch (e) {
+        toast(e.message, true);
+      }
+    });
+    $('#d-find').addEventListener('click', () => {
+      state.browse.type = KIND_BROWSE[d.tab];
+      state.browse.results = [];
+      go('browse');
+    });
+  }
+  bindFiles();
 }
 
 /* ---------- render ---------- */
 const VIEWS = {
   play: [viewPlay, bindPlay],
   instances: [viewInstances, bindInstances],
+  instance: [viewInstance, bindInstance],
   browse: [viewBrowse, bindBrowse],
   account: [viewAccount, bindAccount],
   settings: [viewSettings, bindSettings],
+  cosmetics: [viewWardrobe, bindWardrobe],
 };
 
 function render() {
@@ -466,6 +656,7 @@ function liveUpdate() {
   liveUpdate();
   try {
     [state.settings, state.account] = await Promise.all([api('settings:get'), api('auth:status')]);
+    quartzI18n.setLanguage(state.settings.language);
     await refreshInstances();
     api('versions:list').then((v) => (state.versions = v)).catch((e) => toast('Lista wersji: ' + e.message, true));
   } catch (e) {

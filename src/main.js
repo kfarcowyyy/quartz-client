@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Menu, dialog } = require('electron');
 const path = require('path');
 
 const store = require('./store');
@@ -13,6 +13,10 @@ const extras = require('./extras');
 const loaders = require('./loaders');
 const java = require('./java');
 const launcher = require('./launcher');
+const content = require('./content');
+const cosmetics = require('./cosmetics');
+const quartzMod = require('./quartz-mod');
+const { pathToFileURL } = require('node:url');
 
 let win;
 const send = (ch, data) => win && !win.isDestroyed() && win.webContents.send(ch, data);
@@ -36,6 +40,7 @@ function createWindow() {
     minHeight: 620,
     backgroundColor: '#f6f3f9',
     title: 'Quartz Client',
+    icon: path.join(__dirname, '..', 'renderer', 'quartz-icon.png'),
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -52,14 +57,36 @@ function createWindow() {
 
 // ---- IPC ----
 handle('versions:list', () => versions.list());
-handle('settings:get', () => store.get());
-handle('settings:set', (patch) => store.set(patch));
+function publicSettings({ account, ...settings }) { return settings; }
+handle('settings:get', () => publicSettings(store.get()));
+handle('settings:set', (patch) => {
+  const allowed = ['ram', 'curseforgeKey', 'optimize', 'voicechat', 'javaPath', 'language'];
+  return publicSettings(store.set(Object.fromEntries(allowed.filter((key) => Object.hasOwn(patch, key))
+    .map((key) => [key, patch[key]]))));
+});
+handle('cosmetics:get', () => ({ catalog: cosmetics.catalog, equipped: cosmetics.read(auth.status()) }));
+handle('cosmetics:set', (patch) => cosmetics.save(auth.status(), patch));
 
 handle('instances:list', () => instances.list());
 handle('instances:delete', (id) => instances.remove(id));
-handle('instances:open', (id) => shell.openPath(paths.instDir(id)));
+handle('instances:open', (id, kind) =>
+  shell.openPath(kind ? content.folder(id, kind) : paths.instDir(id))
+);
+
+handle('content:list', (id) => content.list(id));
+handle('content:toggle', (id, kind, name) => content.toggle(id, kind, name));
+handle('content:delete', (id, kind, name) => content.remove(id, kind, name));
+handle('content:import', async (id, kind) => {
+  const r = await dialog.showOpenDialog(win, {
+    properties: ['openFile', 'multiSelection'],
+    filters: [{ name: 'Pliki', extensions: ['jar', 'zip'] }],
+  });
+  if (r.canceled) return 0;
+  return content.importFiles(id, kind, r.filePaths);
+});
 handle('instances:create', async (o) => {
   const inst = instances.create(o);
+  quartzMod.install(inst);
   send('status', 'Instaluję dodatki...');
   await extras.applyDefaults(inst, { optimize: !!o.optimize, voicechat: !!o.voicechat }, (m) =>
     send('log', m)
@@ -69,7 +96,14 @@ handle('instances:create', async (o) => {
 });
 
 handle('auth:status', () => auth.status());
-handle('auth:microsoft', () => auth.microsoft());
+handle('auth:microsoft', async () => {
+  try {
+    return await auth.microsoft();
+  } catch (error) {
+    if (/error\.gui\.close/i.test(String(error?.message || error))) return auth.status();
+    throw error;
+  }
+});
 handle('auth:offline', (name) => auth.offline(name));
 handle('auth:logout', () => auth.logout());
 
@@ -105,6 +139,11 @@ handle('game:play', async (id) => {
 
   send('status', 'Przygotowuję loader...');
   const customId = await loaders.prepare(inst);
+  const hasQuartz = quartzMod.install(inst);
+  if (!hasQuartz && inst.loader !== 'vanilla') {
+    send('log', `[Quartz] Mod build unavailable for ${inst.loader} / Minecraft ${inst.mcVersion}.`);
+  }
+  const wardrobeFile = cosmetics.profileFile(auth.status());
 
   if (settings.voicechat) {
     send('status', 'Sprawdzam Simple Voice Chat...');
@@ -118,6 +157,10 @@ handle('game:play', async (id) => {
     javaPath,
     customId,
     ram: settings.ram,
+    quartzArgs: hasQuartz && wardrobeFile ? [
+      `-Dquartz.wardrobe=${pathToFileURL(wardrobeFile).href}`,
+      `-Dquartz.language=${settings.language === 'pl' ? 'pl' : 'en'}`,
+    ] : [],
     onLog: (m) => send('log', m),
     onProgress: (p) => send('progress', p),
     onClose: (code) => {
@@ -128,5 +171,8 @@ handle('game:play', async (id) => {
   send('status', 'Gra uruchomiona');
 });
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  app.setAppUserModelId('pl.quartz.client');
+  createWindow();
+});
 app.on('window-all-closed', () => app.quit());
