@@ -36,6 +36,36 @@ final class QuartzTheme {
         }
     }
 
+    static void hudBackground(GuiGraphicsExtractor g, int x, int y, int w, int h, int color) {
+        if (w <= 0 || h <= 0 || (color >>> 24) == 0) return;
+        int radius = Math.min(6, Math.min(w, h) / 2) * 2;
+        var pose = g.pose();
+        pose.pushMatrix();
+        try {
+            pose.translate(x, y).scale(0.5f, 0.5f);
+            int width = w * 2, height = h * 2;
+            g.fill(0, radius, width, height - radius, color);
+            for (int row = 0; row < radius; row++) {
+                double dy = radius - row - 0.5;
+                double edge = radius - Math.sqrt(radius * radius - dy * dy);
+                int partial = (int) edge;
+                int alpha = (int) Math.round((color >>> 24) * (1 - (edge - partial)));
+                int edgeColor = (color & 0x00FFFFFF) | (alpha << 24);
+                hudRow(g, width, row, partial, color, edgeColor);
+                hudRow(g, width, height - 1 - row, partial, color, edgeColor);
+            }
+        } finally {
+            pose.popMatrix();
+        }
+    }
+
+    private static void hudRow(GuiGraphicsExtractor g, int width, int row, int edge, int color, int edgeColor) {
+        g.fill(edge + 1, row, width - edge - 1, row + 1, color);
+        if ((edgeColor >>> 24) == 0) return;
+        g.fill(edge, row, edge + 1, row + 1, edgeColor);
+        g.fill(width - edge - 1, row, width - edge, row + 1, edgeColor);
+    }
+
     static void card(GuiGraphicsExtractor g, int x, int y, int w, int h, int background, int line) {
         rounded(g, x, y + 2, w, h, 0x1F663F83);
         rounded(g, x, y, w, h, line);

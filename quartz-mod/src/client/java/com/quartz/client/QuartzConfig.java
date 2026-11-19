@@ -35,6 +35,7 @@ public final class QuartzConfig {
         int x, y;
         Integer oldX, oldY;
         String text, target;
+        boolean armorHorizontal, armorSmooth;
 
         Hud() {}
 

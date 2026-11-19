@@ -1,4 +1,3 @@
-const { Client } = require('minecraft-launcher-core');
 const paths = require('./paths');
 
 // Flagi G1GC pod klienta (wariant Aikara) - mniej przycięć
@@ -24,6 +23,7 @@ const JVM_FLAGS = [
 
 function launch({ inst, authorization, javaPath, customId, ram, quartzArgs = [], onLog, onProgress, onClose }) {
   return new Promise((resolve, reject) => {
+    const { Client } = require('minecraft-launcher-core');
     const client = new Client();
     client.on('debug', (m) => onLog(String(m)));
     client.on('data', (m) => onLog(String(m).trimEnd()));

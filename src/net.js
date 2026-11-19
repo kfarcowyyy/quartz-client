@@ -3,8 +3,8 @@ const path = require('path');
 
 const UA = 'QuartzClient/0.1 (launcher)';
 
-async function getJson(url, headers = {}) {
-  const r = await fetch(url, { headers: { 'User-Agent': UA, ...headers } });
+async function getJson(url, headers = {}, signal) {
+  const r = await fetch(url, { headers: { 'User-Agent': UA, ...headers }, signal });
   if (!r.ok) throw new Error(`HTTP ${r.status} dla ${url}`);
   return r.json();
 }

@@ -182,7 +182,11 @@ function openNewInstance() {
     <h2>Nowa instancja</h2>
     <label class="field">Nazwa<input id="n-name" placeholder="Moja instancja" /></label>
     <label class="check"><input type="checkbox" id="n-snap" /> Pokaż snapshoty</label>
-    <label class="field">Wersja Minecrafta<select id="n-ver"></select></label>
+    <label class="field">Wersja Minecrafta<select id="n-ver" disabled></select></label>
+    <div class="row">
+      <button class="btn" id="n-refresh" type="button">Odśwież listę</button>
+      <small id="n-version-status" role="status"></small>
+    </div>
     <label class="field">Loader
       <select id="n-loader">
         <option value="fabric">Fabric (mody)</option>
@@ -193,39 +197,80 @@ function openNewInstance() {
     <label class="check"><input type="checkbox" id="n-voice" ${state.settings.voicechat ? 'checked' : ''}/> Simple Voice Chat</label>
     <div class="row" style="justify-content:flex-end;margin-top:8px">
       <button class="btn" id="n-cancel">Anuluj</button>
-      <button class="btn primary" id="n-ok">Utwórz</button>
+      <button class="btn primary" id="n-ok" disabled>Utwórz</button>
     </div>
   </div></div>`;
 
+  const select = $('#n-ver', root);
+  const status = $('#n-version-status', root);
+  const refresh = $('#n-refresh', root);
+  const create = $('#n-ok', root);
+  let loading = false;
+  let creating = false;
   const fill = () => {
-    const snap = $('#n-snap').checked;
-    $('#n-ver').innerHTML = state.versions
+    const previous = select.value;
+    const snap = $('#n-snap', root).checked;
+    select.innerHTML = state.versions
       .filter((v) => v.type === 'release' || (snap && v.type === 'snapshot'))
-      .map((v) => `<option>${esc(v.id)}</option>`)
+      .map((v) => `<option value="${esc(v.id)}">${esc(v.id)}</option>`)
       .join('');
+    if (Array.from(select.options).some(option => option.value === previous)) select.value = previous;
+    select.disabled = !select.value;
+    create.disabled = creating || !select.value;
+  };
+  const versionsInDialog = async (force = false) => {
+    if (loading) return;
+    loading = true;
+    refresh.disabled = true;
+    status.textContent = 'Wczytuję wersje Minecrafta…';
+    try {
+      if (!state.versions.length) {
+        const local = await api('versions:list');
+        if (!select.isConnected) return;
+        state.versions = local.items;
+        fill();
+      }
+      const latest = await api('versions:list', { refresh: true, force });
+      if (!select.isConnected) return;
+      state.versions = latest.items;
+      fill();
+      status.textContent = latest.refreshFailed ? 'Nie udało się pobrać listy wersji. Możesz użyć zapisanej listy.' : '';
+    } catch {
+      if (select.isConnected) status.textContent = state.versions.length
+        ? 'Nie udało się pobrać listy wersji. Możesz użyć zapisanej listy.'
+        : 'Nie udało się wczytać wersji Minecrafta.';
+    } finally {
+      loading = false;
+      refresh.disabled = false;
+    }
   };
   fill();
-  $('#n-snap').addEventListener('change', fill);
+  $('#n-snap', root).addEventListener('change', fill);
+  refresh.addEventListener('click', () => versionsInDialog(true));
+  versionsInDialog();
   $('#n-cancel').addEventListener('click', () => (root.innerHTML = ''));
   $('#n-ok').addEventListener('click', async () => {
     const btn = $('#n-ok');
+    if (!select.value || creating) return;
+    creating = true;
     btn.disabled = true;
     btn.textContent = 'Tworzę...';
     try {
       const inst = await api('instances:create', {
         name: $('#n-name').value.trim() || 'Instancja',
-        mcVersion: $('#n-ver').value,
+        mcVersion: select.value,
         loader: $('#n-loader').value,
         voicechat: $('#n-voice').checked,
       });
       state.selected = inst.id;
-      root.innerHTML = '';
+      if (select.isConnected) root.innerHTML = '';
       await refreshInstances();
       toast('Instancja gotowa');
       render();
     } catch (e) {
       toast(e.message, true);
-      btn.disabled = false;
+      creating = false;
+      btn.disabled = !select.value;
       btn.textContent = 'Utwórz';
     }
   });
@@ -649,14 +694,19 @@ function liveUpdate() {
 }
 
 (async function init() {
+  renderNav();
+  render();
   liveUpdate();
-  try {
-    [state.settings, state.account] = await Promise.all([api('settings:get'), api('auth:status')]);
-    quartzI18n.setLanguage(state.settings.language);
-    await refreshInstances();
-    api('versions:list').then((v) => (state.versions = v)).catch((e) => toast('Lista wersji: ' + e.message, true));
-  } catch (e) {
-    toast(e.message, true);
+  const results = await Promise.allSettled([
+    api('settings:get').then(settings => {
+      state.settings = settings;
+      quartzI18n.setLanguage(settings.language);
+    }),
+    api('auth:status').then(account => { state.account = account; }),
+    refreshInstances(),
+  ]);
+  for (const result of results) {
+    if (result.status === 'rejected') toast(result.reason?.message || String(result.reason), true);
   }
   renderNav();
   render();

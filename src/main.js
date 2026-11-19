@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, shell, Menu, dialog } = require('electron');
 const path = require('path');
+const fs = require('node:fs');
 
 const store = require('./store');
 const paths = require('./paths');
@@ -19,6 +20,23 @@ const quartzMod = require('./quartz-mod');
 const { pathToFileURL } = require('node:url');
 
 let win;
+
+function recordStartupError(error) {
+  const message = error?.stack || String(error);
+  console.error(message);
+  try {
+    const file = path.join(app.getPath('userData'), 'launcher-startup.log');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.appendFileSync(file, new Date().toISOString() + ' ' + message + '\n');
+    return file;
+  } catch { return null; }
+}
+
+function showStartupError(error) {
+  const file = recordStartupError(error);
+  dialog.showErrorBox('Quartz Client', file ? 'Nie udało się otworzyć launchera. Dziennik: ' + file
+    : 'Nie udało się otworzyć launchera: ' + (error?.message || String(error)));
+}
 const send = (ch, data) => win && !win.isDestroyed() && win.webContents.send(ch, data);
 
 function handle(name, fn) {
@@ -48,7 +66,21 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
-  win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  const window = win;
+  let recovered = false;
+  window.webContents.on('preload-error', (_event, _path, error) => showStartupError(error));
+  window.webContents.on('render-process-gone', (_event, details) => {
+    if (details.reason === 'clean-exit' || window.isDestroyed()) return;
+    const error = new Error('Renderer: ' + details.reason + ' (' + details.exitCode + ')');
+    if (recovered) {
+      showStartupError(error);
+      return;
+    }
+    recovered = true;
+    recordStartupError(error);
+    window.webContents.reload();
+  });
+  window.loadFile(path.join(__dirname, '..', 'renderer', 'index.html')).catch(showStartupError);
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https://')) shell.openExternal(url);
     return { action: 'deny' };
@@ -56,7 +88,7 @@ function createWindow() {
 }
 
 // ---- IPC ----
-handle('versions:list', () => versions.list());
+handle('versions:list', (opts) => versions.list(opts));
 function publicSettings({ account, ...settings }) { return settings; }
 handle('settings:get', () => publicSettings(store.get()));
 handle('settings:set', (patch) => {
@@ -196,5 +228,5 @@ handle('game:play', async (id) => {
 app.whenReady().then(() => {
   app.setAppUserModelId('pl.quartz.client');
   createWindow();
-});
+}).catch(showStartupError);
 app.on('window-all-closed', () => app.quit());
