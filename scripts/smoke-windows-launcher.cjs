@@ -21,7 +21,8 @@ async function boot(profile) {
       const select = document.querySelector('#n-ver');
       return select?.options.length > 10 && !select.disabled && Boolean(select.value);
     }, undefined, { timeout: 15000 });
-    return window.locator('#n-ver').inputValue();
+    const selected = await window.locator('#n-ver').inputValue();
+    return selected;
   } finally {
     await app.close();
   }
