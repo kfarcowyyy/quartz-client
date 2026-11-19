@@ -17,12 +17,12 @@ function findJava(dir) {
 }
 
 // Pobiera właściwą Javę (Adoptium) pod daną wersję Minecrafta, jeśli jej nie ma
-async function ensureJava(mcVersion, onStatus) {
+async function ensureJava(mcVersion, onStatus, minimumMajor = 0) {
   const custom = store.get().javaPath;
   if (custom) return custom;
   if (process.platform !== 'win32') return 'java';
 
-  const major = await versions.javaMajor(mcVersion);
+  const major = Math.max(minimumMajor, await versions.javaMajor(mcVersion));
   const dir = path.join(paths.runtime(), String(major));
   const existing = findJava(dir);
   if (existing) return existing;

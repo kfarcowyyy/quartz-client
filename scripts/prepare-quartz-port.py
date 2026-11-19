@@ -727,27 +727,65 @@ final class QuartzGraphics extends GuiComponent {
 ''', encoding="utf-8")
 
 
+def prepare_pre_1194_gui(root):
+    client = root / "src/client/java/com/quartz/client"
+    replace_in(client / "QuartzButton.java", [
+        ("void renderWidget(com.mojang.blaze3d.vertex.PoseStack",
+         "void renderButton(com.mojang.blaze3d.vertex.PoseStack"),
+    ])
+    replace_in(client / "QuartzWardrobeScreen.java", [
+        ("InventoryScreen.renderEntityInInventoryFollowsMouse(\n                    g.pose(), ",
+         "InventoryScreen.renderEntityInInventory(\n                    "),
+    ])
+    replace_in(client / "QuartzGraphics.java", [
+        ("minecraft.getItemRenderer().renderAndDecorateItem(pose, item, x, y);",
+         """var modelView = RenderSystem.getModelViewStack();
+        modelView.pushPose();
+        try {
+            modelView.mulPoseMatrix(pose.last().pose());
+            RenderSystem.applyModelViewMatrix();
+            minecraft.getItemRenderer().renderAndDecorateItem(item, x, y);
+        } finally {
+            modelView.popPose();
+            RenderSystem.applyModelViewMatrix();
+        }"""),
+    ])
+    replace_in(client / "QuartzHud.java", [
+        ("effect.isInfiniteDuration()", "effect.getDuration() < 0"),
+    ])
+
+
+def prepare_pre_1193_names(root):
+    for file in (root / "src/client/java/com/quartz/client").rglob("*.java"):
+        replace_in(file, [
+            ("net.minecraft.core.registries.BuiltInRegistries.", "net.minecraft.core.Registry."),
+            ("import com.mojang.math.Axis;", "import com.mojang.math.Vector3f;"),
+            ("com.mojang.math.Axis.ZP.", "com.mojang.math.Vector3f.ZP."),
+            ("Axis.YP.", "Vector3f.YP."), ("Axis.ZP.", "Vector3f.ZP."),
+        ])
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("version")
 parser.add_argument("project", type=Path)
 args = parser.parse_args()
 if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.16.3", "1.16.4", "1.16.5", "1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
     prepare_legacy_style_networking(args.project)
-if args.version in {"1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10"}:
+if args.version in {"1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10"}:
     prepare_remapped(args.project)
-    if args.version in {"1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
+    if args.version in {"1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
         prepare_legacy_effect_and_chat_apis(args.project)
-    if args.version in {"1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8"}:
+    if args.version in {"1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8"}:
         prepare_pre_submit(args.project)
-    if args.version in {"1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5"}:
+    if args.version in {"1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5"}:
         prepare_pre_pipeline(args.project)
-    if args.version in {"1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
+    if args.version in {"1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
         prepare_legacy_chat_rendering(args.project)
-    if args.version in {"1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4"}:
+    if args.version in {"1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4"}:
         prepare_older_texture_constructor(args.project)
-    if args.version in {"1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1"}:
+    if args.version in {"1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1"}:
         prepare_entity_based_player_rendering(args.project)
-    if args.version in {"1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6"}:
+    if args.version in {"1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6"}:
         for file in (args.project / "src").rglob("*.java"):
             replace_in(file, [
                 ("net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(", "new net.minecraft.resources.ResourceLocation("),
@@ -770,13 +808,17 @@ if args.version in {"1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1
     }
 }
 """, encoding="utf-8")
-    if args.version in {"1.19.4", "1.20", "1.20.1"}:
+    if args.version in {"1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1"}:
         prepare_1201_screen_apis(args.project)
         prepare_legacy_hud_textures(args.project)
-    if args.version in {"1.19.4", "1.20", "1.20.1"}:
+    if args.version in {"1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1"}:
         prepare_legacy_skin(args.project)
-    if args.version == "1.19.4":
+    if args.version.startswith("1.19"):
         prepare_pose_stack_gui(args.project)
+    if args.version in {"1.19", "1.19.1", "1.19.2", "1.19.3"}:
+        prepare_pre_1194_gui(args.project)
+    if args.version in {"1.19", "1.19.1", "1.19.2"}:
+        prepare_pre_1193_names(args.project)
     if args.version == "1.20.5":
         replace_in(args.project / "src/main/java/com/quartz/QuartzServerStyle.java", [
             ("context.server()", "context.player().server"),

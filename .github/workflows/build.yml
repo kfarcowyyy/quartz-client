@@ -1,7 +1,7 @@
 name: Build Quartz Client
 on:
   push:
-    branches: ["quartz-mod-first-build", "quartz-cosmetics", "quartz-refinements", "quartz-version-picker", "quartz-version-ports"]
+    branches: ["quartz-mod-first-build", "quartz-cosmetics", "quartz-refinements", "quartz-version-ports"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
@@ -22,6 +22,7 @@ jobs:
     needs: targets
     strategy:
       fail-fast: false
+      max-parallel: 8
       matrix:
         target: ${{ fromJSON(needs.targets.outputs.matrix) }}
     runs-on: ubuntu-latest
@@ -45,7 +46,11 @@ jobs:
           set -o pipefail
           if gradle "${args[@]}" 2>&1 | tee "$log"; then exit 0; fi
           if grep -qiE 'Could not resolve all (artifacts|files)|Could not GET|Read timed out' "$log"; then
-            gradle "${args[@]}" --refresh-dependencies
+            for delay in 12 30; do
+              sleep "$delay"
+              if gradle "${args[@]}"; then exit 0; fi
+            done
+            exit 1
           else
             exit 1
           fi

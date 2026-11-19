@@ -225,11 +225,11 @@ handle('game:play', async (id) => {
   send('status', 'Logowanie...');
   const authorization = await auth.authorization();
 
-  const javaPath = await java.ensureJava(inst.mcVersion, (s) => send('status', s));
+  const hasQuartz = quartzMod.install(inst);
+  const javaPath = await java.ensureJava(inst.mcVersion, (s) => send('status', s), hasQuartz ? 21 : 0);
 
   send('status', 'Przygotowuję loader...');
   const customId = await loaders.prepare(inst);
-  const hasQuartz = quartzMod.install(inst);
   const wardrobeAccount = auth.status();
   const wardrobeFile = cosmetics.profileFile(wardrobeAccount);
   if (hasQuartz && wardrobeAccount?.type === 'microsoft') {
