@@ -13,6 +13,18 @@ def replace_in(file, substitutions):
 
 def prepare_remapped(root):
     for file in (root / "src").rglob("*.java"):
+        if file.name == "QuartzChatMixin.java":
+            replace_in(file, [
+                (";Lnet/minecraft/client/gui/Font;IIIZZ)V", ";IIIZ)V"),
+                ("GuiGraphics graphics, Font font, int tick", "GuiGraphics graphics, int tick"),
+                ("boolean focused, boolean updateCursor, Operation<Void>", "boolean focused, Operation<Void>"),
+                ("graphics, font, tick, mouseX, mouseY, focused, updateCursor", "graphics, tick, mouseX, mouseY, focused"),
+                ("accept(Lnet/minecraft/client/GuiMessage$Line;IF)V", "accept(IIILnet/minecraft/client/GuiMessage$Line;IF)V"),
+                ("line = args.get(0)", "line = args.get(3)"),
+                ("float alpha = args.get(2)", "float alpha = args.get(5)"),
+                ("args.set(2, alpha", "args.set(5, alpha"),
+                ("import net.minecraft.client.gui.Font;\n", ""),
+            ])
         if file.name == "QuartzStyleLayer.java":
             replace_in(file, [("net.minecraft.client.renderer.rendertype.RenderTypes",
                               "net.minecraft.client.renderer.RenderType"),
@@ -47,7 +59,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("version")
 parser.add_argument("project", type=Path)
 args = parser.parse_args()
-if args.version in {"1.21.9", "1.21.10"}:
+if args.version in {"1.21.8", "1.21.9", "1.21.10"}:
     prepare_remapped(args.project)
 elif args.version in {"26.1", "26.1.1", "26.1.2", "26.2"}:
     prepare_named(args.project)
