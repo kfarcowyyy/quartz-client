@@ -553,6 +553,20 @@ import net.minecraft.client.multiplayer.ClientPacketListener;"""),
          "ClientTickCallback.EVENT.register(client -> {"),
     ])
 
+def prepare_early_116_chat(root):
+    chat = root / "src/client/java/com/quartz/client/mixin/QuartzChatMixin.java"
+    replace_in(chat, [
+        ('method = "addMessage(Lnet/minecraft/network/chat/Component;IIZ)V"',
+         'method = "addMessage(Lnet/minecraft/network/chat/Component;I)V"'),
+        ("net.minecraft.network.chat.Component message, int messageId, int tick, boolean refresh, CallbackInfo callback",
+         "net.minecraft.network.chat.Component message, int messageId, CallbackInfo callback"),
+        ("if (refresh || !QuartzConfig.data.smoothChat ||",
+         "if (!QuartzConfig.data.smoothChat ||"),
+        ("quartz$arrivals.putIfAbsent(tick, now);",
+         "quartz$arrivals.putIfAbsent(messageId, now);"),
+    ])
+
+
 def prepare_legacy_effect_and_chat_apis(root):
     client = root / "src/client/java/com/quartz/client"
     replace_in(client / "QuartzHud.java", [
@@ -1402,6 +1416,8 @@ if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.1
         prepare_legacy_widget_rebuild(args.project)
     if args.version.split(".")[1] in {"15", "16", "17", "18"} or args.version == "1.19":
         prepare_pre_1191_chat(args.project)
+        if args.version in {"1.16", "1.16.1"}:
+            prepare_early_116_chat(args.project)
     if args.version.split(".")[1] in {"15", "16", "17", "18"} or args.version in {"1.19", "1.19.1", "1.19.2"}:
         prepare_pose_stack_chat_with_tick(args.project)
     if args.version in {"1.16", "1.16.1"}:
