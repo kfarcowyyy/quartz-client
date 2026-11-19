@@ -97,7 +97,8 @@ def prepare_pre_submit(root):
         ("mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean doubleClick)", "mouseClicked(double mx, double my, int mouseButton)"),
         ("super.mouseClicked(event, doubleClick)", "super.mouseClicked(mx, my, mouseButton)"),
         ("event.button()", "mouseButton"), ("event.x()", "mx"), ("event.y()", "my"),
-    ])    replace_in(client / "QuartzWardrobe.java", [
+    ])
+    replace_in(client / "QuartzWardrobe.java", [
         ("import net.minecraft.world.entity.player.PlayerModelType;\n", ""),
         ("import net.minecraft.core.ClientAsset;\n", ""),
         ("PlayerModelType.", "PlayerSkin.Model."),
@@ -394,7 +395,8 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.Minecraft;
 
-import java.util.HashMap;import java.util.Map;
+import java.util.HashMap;
+import java.util.Map;
 
 final class QuartzSocial {
     private static final Map<Integer, Integer> APPEARANCES = new HashMap<>();
