@@ -122,7 +122,7 @@ handle('cosmetics:capes', async () => {
   const account = auth.status();
   if (account?.type !== 'microsoft') return [];
   try {
-    return await cosmetics.loadCapes(account, await auth.authorization());
+    return cosmetics.cacheCapes(account, await auth.minecraftProfile());
   } catch {
     const cached = cosmetics.cachedCapes(account);
     if (cached) return cached;
@@ -161,7 +161,9 @@ handle('instances:create', async (o) => {
 handle('auth:status', () => auth.status());
 handle('auth:microsoft', async () => {
   try {
-    return await auth.microsoft();
+    const account = await auth.microsoft();
+    try { cosmetics.cacheCapes(account, await auth.minecraftProfile()); } catch { /* Sign-in can succeed without the cape cache. */ }
+    return account;
   } catch (error) {
     if (/error\.gui\.close/i.test(String(error?.message || error))) return auth.status();
     throw error;
@@ -209,7 +211,7 @@ handle('game:play', async (id) => {
   const wardrobeAccount = auth.status();
   const wardrobeFile = cosmetics.profileFile(wardrobeAccount);
   if (hasQuartz && wardrobeAccount?.type === 'microsoft') {
-    cosmetics.loadCapes(wardrobeAccount, authorization).catch(() => {});
+    auth.minecraftProfile().then(profile => cosmetics.cacheCapes(wardrobeAccount, profile)).catch(() => {});
   }
 
   if (settings.voicechat) {

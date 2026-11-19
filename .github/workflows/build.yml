@@ -114,11 +114,19 @@ jobs:
         with:
           name: Quartz-Client-Windows
           path: release-files
-      - name: Publish the Windows installer
+      - uses: actions/download-artifact@v4
+        with:
+          name: quartz-client-mod-1.21.11
+          path: release-files
+      - uses: actions/download-artifact@v4
+        with:
+          name: quartz-client-mod-26.3
+          path: release-files
+      - name: Publish the Windows installer and server mods
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           version="${RELEASE_TAG#v}"
-          gh release create "$RELEASE_TAG" release-files/Quartz-Client-Setup-*.exe --verify-tag --generate-notes --title "Quartz Client $version"
+          gh release create "$RELEASE_TAG" release-files/Quartz-Client-Setup-*.exe release-files/Quartz-Client-Mod-*.jar --verify-tag --generate-notes --title "Quartz Client $version"

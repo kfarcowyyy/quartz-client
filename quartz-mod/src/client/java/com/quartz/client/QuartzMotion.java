@@ -63,6 +63,17 @@ public final class QuartzMotion {
         part.zRot = blend(part.zRot, z, mix);
     }
 
+    static boolean shouting(int id) {
+        if (QuartzStyle.local(id) && id == avatar && active != null && active.id().equals("boo")) {
+            double t = elapsed() / active.seconds();
+            return t > .44 && t < .84;
+        }
+        Play current = REMOTE.get(id);
+        if (current == null || !current.emote().id().equals("boo")) return false;
+        double t = (System.nanoTime() - current.when()) / (current.emote().seconds() * 1_000_000_000d);
+        return t > .44 && t < .84;
+    }
+
     public static void apply(PlayerModel p, AvatarRenderState state) {
         if (QuartzStyle.hasSuit(state.id)) {
             p.jacket.visible = false;
@@ -126,9 +137,11 @@ public final class QuartzMotion {
                 float hold = smooth((t - .34f) / .19f) * smooth((1 - t) / .15f);
                 turn(p.rightArm, blend(-2.53f, -1.03f, hold), .2f, blend(.51f, .06f, hold), mix);
                 turn(p.leftArm, -2.52f + 2.02f * hold, -.2f, -.5f, mix);
-                p.head.x -= 5f * hold;
-                p.head.y += 9f * hold - 4f * lift * (1 - hold) * mix;
-                p.head.z -= 8f * hold;
+                var hand = new org.joml.Vector3f(0, 10, 0)
+                        .rotateX(p.rightArm.xRot).rotateY(p.rightArm.yRot).rotateZ(p.rightArm.zRot);
+                p.head.x = blend(p.head.x, p.rightArm.x + hand.x, hold);
+                p.head.y = blend(p.head.y - 4f * lift * (1 - hold) * mix, p.rightArm.y + hand.y, hold);
+                p.head.z = blend(p.head.z, p.rightArm.z + hand.z, hold);
                 turn(p.head, .15f - .23f * hold, -.29f * hold, .21f * hold, mix);
             }
             case "boo" -> {

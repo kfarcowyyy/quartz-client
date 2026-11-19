@@ -1,7 +1,7 @@
 package com.quartz.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import org.joml.Matrix4f;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.PartPose;
 import net.minecraft.client.model.geom.builders.CubeListBuilder;
@@ -24,6 +24,7 @@ public final class QuartzStyleLayer extends RenderLayer<AvatarRenderState, Playe
     private record Piece(String bone, ModelPart part, int color) {}
     private static final Identifier MATERIAL = Identifier.fromNamespaceAndPath("quartz", "textures/wardrobe/style-material.png");
     private static final Map<String, List<Piece>> MODELS = new HashMap<>();
+    private static final Piece MOUTH = bake(new QuartzStyle.Box("head", -1.25f, -2.65f, -4.64f, 2.5f, 1.67f, .12f, "#24172c"));
 
     public QuartzStyleLayer(RenderLayerParent<AvatarRenderState, PlayerModel> parent) { super(parent); }
 
@@ -38,10 +39,20 @@ public final class QuartzStyleLayer extends RenderLayer<AvatarRenderState, Playe
     @Override
     public void submit(PoseStack pose, SubmitNodeCollector collector, int light, AvatarRenderState state, float yaw, float pitch) {
         if (state.isInvisible || state.isSpectator) return;
-        if (QuartzStyle.accessories().stream().noneMatch(item -> QuartzStyle.equipped(state.id, item))) return;
+        boolean mouth = QuartzMotion.shouting(state.id);
+        if (!mouth && QuartzStyle.accessories().stream().noneMatch(item -> QuartzStyle.equipped(state.id, item))) return;
         var model = getParentModel();
         model.setupAnim(state);
-        var type = RenderTypes.entityCutoutNoCull(MATERIAL);
+        var type = RenderTypes.entityCutout(MATERIAL);
+        if (mouth) {
+            pose.pushPose();
+            try {
+                model.root().translateAndRotate(pose);
+                model.head.translateAndRotate(pose);
+                collector.order(1).submitModelPart(MOUTH.part(), pose, type, light, OverlayTexture.NO_OVERLAY,
+                        null, MOUTH.color());
+            } finally { pose.popPose(); }
+        }
         for (var item : QuartzStyle.accessories()) {
             if (!QuartzStyle.equipped(state.id, item)) continue;
             boolean glow = item.id().equals("halo");
@@ -54,8 +65,8 @@ public final class QuartzStyleLayer extends RenderLayer<AvatarRenderState, Playe
                         float sign = piece.bone().equals("wingL") ? -1 : 1;
                         pose.translate(sign * .12f, .14f, .18f);
                         float beat = (float) Math.sin(state.ageInTicks * .40f);
-                        pose.mulPose(Axis.YP.rotation(sign * (.40f + beat * .36f)));
-                        pose.mulPose(Axis.ZP.rotation(sign * (.13f + beat * .10f)));
+                        pose.mulPose(new Matrix4f().rotationY(sign * (.40f + beat * .36f)));
+                        pose.mulPose(new Matrix4f().rotationZ(sign * (.13f + beat * .10f)));
                     }
                     collector.order(1).submitModelPart(piece.part(), pose, type, glow ? 0xF000F0 : light,
                             OverlayTexture.NO_OVERLAY, null, piece.color());

@@ -5,6 +5,7 @@ import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.MinecraftServer;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -18,7 +19,7 @@ public final class QuartzServerStyle implements ModInitializer {
         PayloadTypeRegistry.serverboundPlay().register(QuartzStylePacket.TYPE, QuartzStylePacket.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(QuartzStylePacket.TYPE, QuartzStylePacket.CODEC);
         ServerPlayNetworking.registerGlobalReceiver(QuartzStylePacket.TYPE, (packet, context) ->
-                context.server().execute(() -> receive(context.player(), packet)));
+                context.server().execute(() -> receive(context.server(), context.player(), packet)));
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             ServerPlayer player = handler.player;
             if (ServerPlayNetworking.canSend(player, QuartzStylePacket.TYPE)) {
@@ -29,23 +30,23 @@ public final class QuartzServerStyle implements ModInitializer {
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             ServerPlayer player = handler.player;
             var look = players.remove(player.getUUID());
-            if (look != null) broadcast(player, new QuartzStylePacket(look.actor(), -1, 0));
+            if (look != null) broadcast(server, player, new QuartzStylePacket(look.actor(), -1, 0));
         });
     }
 
-    private void receive(ServerPlayer player, QuartzStylePacket packet) {
+    private void receive(MinecraftServer server, ServerPlayer player, QuartzStylePacket packet) {
         if (!QuartzStylePacket.validSelection(packet.mask()) || packet.emote() < 0 || packet.emote() > 8) return;
         long now = System.nanoTime();
         var previous = players.get(player.getUUID());
         if (previous != null && now - previous.when() < 90_000_000L) return;
         if (previous != null && previous.actor() != player.getId())
-            broadcast(player, new QuartzStylePacket(previous.actor(), -1, 0));
+            broadcast(server, player, new QuartzStylePacket(previous.actor(), -1, 0));
         players.put(player.getUUID(), new Look(player.getId(), packet.mask(), now));
-        broadcast(player, new QuartzStylePacket(player.getId(), packet.mask(), packet.emote()));
+        broadcast(server, player, new QuartzStylePacket(player.getId(), packet.mask(), packet.emote()));
     }
 
-    private static void broadcast(ServerPlayer owner, QuartzStylePacket packet) {
-        for (ServerPlayer player : owner.level().getServer().getPlayerList().getPlayers()) {
+    private static void broadcast(MinecraftServer server, ServerPlayer owner, QuartzStylePacket packet) {
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             if (player != owner && ServerPlayNetworking.canSend(player, QuartzStylePacket.TYPE))
                 ServerPlayNetworking.send(player, packet);
         }

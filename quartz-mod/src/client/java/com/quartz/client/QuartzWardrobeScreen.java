@@ -14,6 +14,7 @@ public final class QuartzWardrobeScreen extends QuartzSafeScreen {
     private final Screen parent;
     private Tab tab = Tab.SKINS;
     private boolean slim;
+    private int editing = -1;
     private int left, top, span, page, pages, limit;
     private List<QuartzWardrobe.Skin> skins = List.of();
     private List<QuartzWardrobe.Cape> capes = List.of();
@@ -67,6 +68,19 @@ public final class QuartzWardrobeScreen extends QuartzSafeScreen {
     }
 
     private void initStyle() {
+        if (tab == Tab.EMOTES && editing >= 0) {
+            int gap = 7, unit = (span - gap) / 2;
+            List<QuartzStyle.Emote> choices = QuartzStyle.emotes();
+            for (int i = 0; i < choices.size(); i++) {
+                var emote = choices.get(i);
+                add(emote.label(), left + (i % 2) * (unit + gap), 76 + (i / 2) * 22, unit, 19,
+                        emote.equals(QuartzStyle.emote(editing)), () -> change(() -> {
+                            QuartzStyle.setEmote(editing, emote);
+                            editing = -1;
+                        }));
+            }
+            return;
+        }
         limit = Math.max(1, (height - 110) / 31);
         int count = tab == Tab.COSMETICS ? QuartzStyle.accessories().size() : 8;
         pages = Math.max(1, (count + limit - 1) / limit);
@@ -82,11 +96,7 @@ public final class QuartzWardrobeScreen extends QuartzSafeScreen {
             } else {
                 var item = QuartzStyle.emote(index);
                 add(QuartzText.of("Change", "Zmień"), left + body - 109, y + 6, 50, 17, false,
-                        () -> change(() -> {
-                            var list = QuartzStyle.emotes();
-                            int next = list.indexOf(item) + 1;
-                            QuartzStyle.setEmote(index, next < list.size() ? list.get(next) : null);
-                        }));
+                        () -> { editing = index; rebuildWidgets(); });
                 add(QuartzText.of("Clear", "Wyczyść"), left + body - 53, y + 6, 48, 17, false,
                         () -> change(() -> QuartzStyle.setEmote(index, null))).active = item != null;
             }
@@ -102,6 +112,11 @@ public final class QuartzWardrobeScreen extends QuartzSafeScreen {
     }
 
     private void drawStyle(GuiGraphics g, int mx, int my) {
+        if (tab == Tab.EMOTES && editing >= 0) {
+            g.drawString(font, QuartzText.of("Choose an emote for slot " + (editing + 1),
+                    "Wybierz emotkę do slotu " + (editing + 1)), left, 60, QuartzTheme.ACCENT, false);
+            return;
+        }
         int body = styleWidth(), count = tab == Tab.COSMETICS ? QuartzStyle.accessories().size() : 8;
         if (tab == Tab.COSMETICS && body < span) {
             int x = left + body + 8, y = 66, bottom = height - 38;
@@ -168,6 +183,7 @@ public final class QuartzWardrobeScreen extends QuartzSafeScreen {
     private void tab(Component label, int x, int size, Tab next) {
         add(label, x, 29, size, 21, tab == next, () -> {
             tab = next;
+            editing = -1;
             page = 0;
             notice = null;
             rebuildWidgets();
@@ -214,5 +230,10 @@ public final class QuartzWardrobeScreen extends QuartzSafeScreen {
         drawWidgets(g, mouseX, mouseY, delta);
     }
 
-    @Override public void onClose() { Minecraft.getInstance().setScreen(parent); }
+    @Override public void onClose() {
+        if (editing >= 0) {
+            editing = -1;
+            rebuildWidgets();
+        } else Minecraft.getInstance().setScreen(parent);
+    }
 }

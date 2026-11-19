@@ -108,16 +108,7 @@ function cachedCapes(account) {
   return Array.isArray(capes) ? capes : null;
 }
 
-async function loadCapes(account, authorization) {
-  if (account?.type !== 'microsoft') return [];
-  if (!authorization?.access_token) throw new Error('Sign in to Minecraft to view account capes.');
-  const response = await fetch('https://api.minecraftservices.com/minecraft/profile', {
-    headers: { Authorization: 'Bearer ' + authorization.access_token },
-    redirect: 'error',
-    signal: AbortSignal.timeout(5000),
-  });
-  if (!response.ok) throw new Error('Could not load your Minecraft capes.');
-  const profile = await response.json();
+function cacheCapes(account, profile) {
   if (String(profile.id).replace(/-/g, '').toLowerCase() !== String(account.uuid).replace(/-/g, '').toLowerCase()) {
     throw new Error('The signed in Minecraft account changed.');
   }
@@ -161,4 +152,4 @@ function setEmote(account, index, id) {
   return readStyle(account);
 }
 
-module.exports = { readStyle, equipModel, setEmote, profileFile, read, listSkins, selectSkin, addSkin, removeSkin, cachedCapes, loadCapes };
+module.exports = { readStyle, equipModel, setEmote, profileFile, read, listSkins, selectSkin, addSkin, removeSkin, cachedCapes, cacheCapes };
