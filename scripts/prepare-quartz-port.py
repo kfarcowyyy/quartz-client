@@ -177,16 +177,27 @@ def prepare_pre_pipeline(root):
     chat.write_text(source, encoding="utf-8")
 
 
+def prepare_older_texture_constructor(root):
+    for file in (root / "src").rglob("*.java"):
+        replace_in(file, [
+            ("new DynamicTexture(path.getFileName()::toString, image)", "new DynamicTexture(image)"),
+            ('new DynamicTexture(() -> "Quartz imported skin", image)', "new DynamicTexture(image)"),
+            ('new DynamicTexture(() -> "Modrinth image", image)', "new DynamicTexture(image)"),
+        ])
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("version")
 parser.add_argument("project", type=Path)
 args = parser.parse_args()
-if args.version in {"1.21.4", "1.21.5", "1.21.8", "1.21.9", "1.21.10"}:
+if args.version in {"1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.8", "1.21.9", "1.21.10"}:
     prepare_remapped(args.project)
-    if args.version in {"1.21.4", "1.21.5", "1.21.8"}:
+    if args.version in {"1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.8"}:
         prepare_pre_submit(args.project)
-    if args.version in {"1.21.4", "1.21.5"}:
+    if args.version in {"1.21.2", "1.21.3", "1.21.4", "1.21.5"}:
         prepare_pre_pipeline(args.project)
+    if args.version in {"1.21.2", "1.21.3", "1.21.4"}:
+        prepare_older_texture_constructor(args.project)
 elif args.version in {"26.1", "26.1.1", "26.1.2", "26.2"}:
     prepare_named(args.project)
     if args.version.startswith("26.1"):
