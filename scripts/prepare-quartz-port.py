@@ -468,8 +468,8 @@ def prepare_early_116_networking(root):
         ("""import net.fabricmc.fabric.api.networking.v1.PacketSender;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;""",
-         """import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+         """import net.fabricmc.fabric.api.event.server.ServerStopCallback;
+import net.fabricmc.fabric.api.event.server.ServerTickCallback;
 import net.fabricmc.fabric.api.network.ServerSidePacketRegistry;"""),
         ("""        ServerPlayNetworking.registerGlobalReceiver(QuartzStylePacket.CHANNEL,
                 (server, player, handler, buffer, responseSender) -> {
@@ -495,12 +495,12 @@ import net.fabricmc.fabric.api.network.ServerSidePacketRegistry;"""),
                 if (server != null) server.execute(() -> receive(server, player, packet));
             }
         });
-        ServerTickEvents.END_SERVER_TICK.register(server -> players.entrySet().removeIf(entry -> {
+        ServerTickCallback.EVENT.register(server -> players.entrySet().removeIf(entry -> {
             if (server.getPlayerList().getPlayer(entry.getKey()) != null) return false;
             broadcast(server, null, new QuartzStylePacket(entry.getValue().actor(), -1, 0));
             return true;
         }));
-        ServerLifecycleEvents.SERVER_STOPPED.register(server -> players.clear());"""),
+        ServerStopCallback.EVENT.register(server -> players.clear());"""),
         ("""        if (previous != null && previous.actor() != player.getId())""",
          """        if (previous == null && ServerSidePacketRegistry.INSTANCE.canPlayerReceive(player, QuartzStylePacket.CHANNEL)) {
             for (Look look : players.values()) send(player, new QuartzStylePacket(look.actor(), look.mask(), 0));
@@ -544,6 +544,14 @@ import net.minecraft.client.multiplayer.ClientPacketListener;"""),
         ("ClientPlayNetworking.send(", "ClientSidePacketRegistry.INSTANCE.sendToServer("),
     ])
 
+
+    quartz_client = root / "src/client/java/com/quartz/client/QuartzModClient.java"
+    replace_in(quartz_client, [
+        ("import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;",
+         "import net.fabricmc.fabric.api.event.client.ClientTickCallback;"),
+        ("ClientTickEvents.END_CLIENT_TICK.register(client -> {",
+         "ClientTickCallback.EVENT.register(client -> {"),
+    ])
 
 def prepare_legacy_effect_and_chat_apis(root):
     client = root / "src/client/java/com/quartz/client"
@@ -1398,7 +1406,7 @@ if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.1
         prepare_pose_stack_chat_with_tick(args.project)
     if args.version in {"1.16", "1.16.1"}:
         replace_in(args.project / "src/main/resources/fabric.mod.json", [
-            ('"fabric-api": "*"', '"fabric-networking-v0": "*"'),
+            ('"fabric-api": "*"', '"fabric-networking-v0": "*", "fabric-events-lifecycle-v0": "*"'),
         ])
     elif args.version.split(".")[1] in {"15", "16", "17", "18"} or args.version in {"1.19", "1.19.1"}:
         replace_in(args.project / "src/main/resources/fabric.mod.json", [
