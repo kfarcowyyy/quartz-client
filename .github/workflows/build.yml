@@ -42,7 +42,7 @@ jobs:
           log="$RUNNER_TEMP/gradle-build.log"
           set -o pipefail
           if gradle "${args[@]}" 2>&1 | tee "$log"; then exit 0; fi
-          if grep -qiE 'Could not resolve all artifacts|Could not GET|Read timed out' "$log"; then
+          if grep -qiE 'Could not resolve all (artifacts|files)|Could not GET|Read timed out' "$log"; then
             gradle "${args[@]}" --refresh-dependencies
           else
             exit 1

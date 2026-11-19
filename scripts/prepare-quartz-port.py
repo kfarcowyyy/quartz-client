@@ -124,9 +124,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument("version")
 parser.add_argument("project", type=Path)
 args = parser.parse_args()
-if args.version in {"1.21.8", "1.21.9", "1.21.10"}:
+if args.version in {"1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10"}:
     prepare_remapped(args.project)
-    if args.version == "1.21.8":
+    if args.version in {"1.21.6", "1.21.7", "1.21.8"}:
         prepare_pre_submit(args.project)
 elif args.version in {"26.1", "26.1.1", "26.1.2", "26.2"}:
     prepare_named(args.project)

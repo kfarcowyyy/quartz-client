@@ -1,5 +1,17 @@
 [
   {
+    "id": "1.21.6",
+    "project": "quartz-mod",
+    "api": "0.128.2+1.21.6",
+    "port": true
+  },
+  {
+    "id": "1.21.7",
+    "project": "quartz-mod",
+    "api": "0.129.0+1.21.7",
+    "port": true
+  },
+  {
     "id": "1.21.8",
     "project": "quartz-mod",
     "api": "0.136.1+1.21.8",
