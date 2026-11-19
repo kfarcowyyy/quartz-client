@@ -80,11 +80,11 @@ public final class QuartzMotion {
 
     private static final BooPose[] BOO = {
             new BooPose(0f, -.42f, .12f, .18f, .04f, 0f, 0f, 0f),
-            new BooPose(.23f, -2.46f, -.20f, -.36f, .37f, .24f, -.35f, 1.3f),
-            new BooPose(.40f, -2.53f, -.22f, -.39f, .45f, .31f, -.40f, 1.8f),
-            new BooPose(.49f, -2.84f, .09f, 1.04f, -.27f, -.15f, .26f, -3.4f),
-            new BooPose(.60f, -2.63f, .18f, .88f, -.14f, -.07f, -.16f, -.5f),
-            new BooPose(.73f, -2.36f, .12f, .78f, -.08f, .03f, -.12f, .5f),
+            new BooPose(.23f, -2.37f, .15f, .63f, .37f, .24f, -.35f, 1.3f),
+            new BooPose(.40f, -2.49f, .17f, .66f, .45f, .31f, -.40f, 1.8f),
+            new BooPose(.49f, -2.77f, -.13f, -.92f, -.27f, -.15f, .26f, -3.4f),
+            new BooPose(.60f, -2.56f, -.10f, -.76f, -.14f, -.07f, -.16f, -.5f),
+            new BooPose(.73f, -2.34f, -.08f, -.61f, -.08f, .03f, -.12f, .5f),
             new BooPose(1f, -.35f, .04f, .14f, .05f, 0f, 0f, 0f)
     };
 
