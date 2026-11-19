@@ -460,6 +460,21 @@ final class QuartzSocial {
 """, encoding="utf-8")
 
 
+def prepare_legacy_effect_and_chat_apis(root):
+    client = root / "src/client/java/com/quartz/client"
+    replace_in(client / "QuartzHud.java", [
+        ("effect.getEffect().unwrapKey()",
+         "net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT.getKey(effect.getEffect())"),
+        ("key.isEmpty() || !effect.showIcon()", "key == null || !effect.showIcon()"),
+        ('key.get().identifier().withPrefix("mob_effect/")',
+         'new net.minecraft.resources.ResourceLocation("mob_effect", key.getPath())'),
+    ])
+    replace_in(client / "mixin/QuartzChatMixin.java", [
+        ("((ChatComponent) (Object) this).isChatFocused()",
+         "net.minecraft.client.Minecraft.getInstance().screen instanceof net.minecraft.client.gui.screens.ChatScreen"),
+    ])
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("version")
 parser.add_argument("project", type=Path)
@@ -468,6 +483,8 @@ if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.1
     prepare_legacy_style_networking(args.project)
 if args.version in {"1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10"}:
     prepare_remapped(args.project)
+    if args.version in {"1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
+        prepare_legacy_effect_and_chat_apis(args.project)
     if args.version in {"1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8"}:
         prepare_pre_submit(args.project)
     if args.version in {"1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5"}:
