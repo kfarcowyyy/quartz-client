@@ -4,14 +4,21 @@ plugins {
 
 repositories { mavenCentral() }
 
+def supportsSplitEnvironment = !(project.minecraft_version.startsWith("1.15") || project.minecraft_version.startsWith("1.16"))
+
 loom {
-    splitEnvironmentSourceSets()
+    if (supportsSplitEnvironment) splitEnvironmentSourceSets()
     mods {
         "quartz" {
             sourceSet sourceSets.main
-            sourceSet sourceSets.client
+            if (supportsSplitEnvironment) sourceSet sourceSets.client
         }
     }
+}
+
+if (!supportsSplitEnvironment) {
+    sourceSets.main.java.srcDir "src/client/java"
+    sourceSets.main.resources.srcDir "src/client/resources"
 }
 
 dependencies {
