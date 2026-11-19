@@ -48,6 +48,32 @@ function toast(msg, err = false) {
   setTimeout(() => el.remove(), 4500);
 }
 
+function confirmRemoval(title, name, message) {
+  return new Promise(resolve => {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'modal removal-dialog';
+    dialog.setAttribute('aria-labelledby', 'removal-title');
+    dialog.setAttribute('aria-describedby', 'removal-message');
+    dialog.innerHTML = `<form method="dialog">
+      <h2 id="removal-title">${esc(title)}</h2>
+      <p id="removal-message" class="sub">${esc(message)}</p>
+      <p class="removal-name">${esc(name)}</p>
+      <div class="row removal-actions">
+        <button class="btn" value="cancel" autofocus>Anuluj</button>
+        <button class="btn danger" value="remove">Usuń</button>
+      </div>
+    </form>`;
+    dialog.addEventListener('close', () => {
+      const confirmed = dialog.returnValue === 'remove';
+      dialog.remove();
+      resolve(confirmed);
+    }, { once: true });
+    document.body.append(dialog);
+    quartzI18n.apply(dialog);
+    dialog.showModal();
+  });
+}
+
 const PAGES = [
   ['play', 'Graj', 'play'],
   ['instances', 'Instancje', 'box'],
@@ -168,7 +194,8 @@ function bindInstances() {
   document.querySelectorAll('[data-del]').forEach((b) =>
     b.addEventListener('click', async (e) => {
       e.stopPropagation();
-      if (!confirm('Usunąć tę instancję razem z jej plikami?')) return;
+      const instance = state.instances.find(item => item.id === b.dataset.del);
+      if (!instance || !await confirmRemoval('Usunąć instancję?', instance.name, 'Instancja i jej pliki zostaną usunięte.')) return;
       await api('instances:delete', b.dataset.del);
       await refreshInstances();
       render();
@@ -654,7 +681,7 @@ function bindFiles() {
   document.querySelectorAll('[data-rm]').forEach((b) =>
     b.addEventListener('click', async () => {
       const it = d.rows[Number(b.dataset.rm)];
-      if (!confirm(`Usunąć "${it.title}"?`)) return;
+      if (!await confirmRemoval('Usunąć plik?', it.title, 'Plik zostanie usunięty z instancji.')) return;
       try {
         await api('content:delete', d.id, it.kind, it.name);
         await loadDetail();

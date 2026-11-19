@@ -22,6 +22,7 @@ public final class QuartzConfig {
         public String language = "en";
         public Map<String, Hud> modules = new LinkedHashMap<>();
         public boolean classicMenu = false;
+        public boolean smoothChat = true;
         public int hudX = 12;
         public int hudY = 12;
         public int background = 0xB0101732;

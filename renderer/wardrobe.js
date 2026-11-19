@@ -128,6 +128,10 @@ function bindWardrobe() {
     const button = event.target.closest('[data-wardrobe-action]');
     if (!button || busy || !active()) return;
     const { wardrobeAction, skin } = button.dataset;
+    if (wardrobeAction === 'remove') {
+      const item = skins?.skins.find(entry => entry.id === skin);
+      if (!item || !await confirmRemoval('Usunąć skina?', item.name, 'Skin zostanie usunięty z garderoby.') || !active()) return;
+    }
     const slim = $('#wardrobe-model', panel)?.value === 'slim';
     busy = true;
     paint();
@@ -146,9 +150,17 @@ function bindWardrobe() {
 
 const styleOffsets = {
   head:[0,0,0], body:[0,0,0], rightArm:[-5,2,0], leftArm:[5,2,0],
-  rightLeg:[-2,12,0], leftLeg:[2,12,0], wingL:[-2,2,3], wingR:[2,2,3],
+  rightLeg:[-2,12,0], leftLeg:[2,12,0], wingL:[-1.31,1.68,2.62], wingR:[1.31,1.68,2.62],
 };
 const styleFaces = [[0,1,3,2],[4,6,7,5],[0,4,5,1],[2,3,7,6],[0,2,6,4],[1,5,7,3]];
+const styleTexture = new Image();
+styleTexture.src = 'web-suit.png';
+const styleUvOrder = [[0,1,3,2],[5,4,6,7],[4,5,1,0],[2,3,7,6],[4,0,2,6],[1,5,7,3]];
+function suitFaces(box) {
+  const [u, v] = box.uv, { w, h, d } = box;
+  return [[u+d,v+d,w,h],[u+d+w+d,v+d,w,h],[u+d,v,w,d],
+    [u+d+w,v,w,d],[u,v+d,d,h],[u+d+w,v+d,d,h]];
+}
 const styleLight = [.90,.81,1,.67,.72,.88];
 
 function drawStylePreview(canvas, item, t) {
@@ -162,35 +174,59 @@ function drawStylePreview(canvas, item, t) {
   for (const b of boxes) {
     const points = [], origin = styleOffsets[b.bone];
     const wing = b.bone === 'wingL' ? -1 : b.bone === 'wingR' ? 1 : 0;
-    const fold = wing * (.35 + .31 * Math.sin(t * 6));
+    const halo = item.id === 'halo';
+    const fold = halo ? -t * .94 : wing * (.43 + .24 * Math.cos(t * 6));
+    const tilt = -wing * (.12 + .095 * Math.sin(t * 6 - .38));
+    const rise = halo ? .24 * Math.sin(t * 2.9) : 0;
+    const textures = b.uv ? suitFaces(b) : null;
     for (let z = 0; z < 2; z++) for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) {
-      const lx = b.x + x * b.w, lz = b.z + z * b.d;
+      const wx = (b.x + x * b.w) * (wing ? .78 : 1);
+      const wy = (b.y + y * b.h) * (wing ? .87 : 1);
+      const lz = (b.z + z * b.d) * (wing ? .86 : 1);
+      const lx = wx * Math.cos(tilt) - wy * Math.sin(tilt);
+      const ly = wx * Math.sin(tilt) + wy * Math.cos(tilt);
       const vx = origin[0] + lx * Math.cos(fold) - lz * Math.sin(fold);
       const vz = origin[2] + lx * Math.sin(fold) + lz * Math.cos(fold);
       const depth = vx * horizontal + vz * facing;
-      points.push([vx * facing - vz * horizontal, origin[1] + b.y + y * b.h + .28 * depth, depth]);
+      points.push([vx * facing - vz * horizontal, origin[1] + ly + rise + .28 * depth, depth]);
     }
     const rgb = [1, 3, 5].map(i => parseInt(b.color.slice(i, i + 2), 16));
     for (let i = 0; i < styleFaces.length; i++) {
-      const pointsOnFace = styleFaces[i].map(j => points[j]);
+      const pointsOnFace = (textures ? styleUvOrder[i] : styleFaces[i]).map(j => points[j]);
       const shade = styleLight[i];
       faces.push({points:pointsOnFace, depth:pointsOnFace.reduce((n, p) => n + p[2], 0) / 4,
-        color:'rgb(' + rgb.map(c => Math.round(c * shade)).join(',') + ')'});
+        uv:textures?.[i], shade, color:'rgb(' + rgb.map(c => Math.round(c * shade)).join(',') + ')'});
     }
   }
   const points = faces.flatMap(face => face.points);
   const left = Math.min(...points.map(x => x[0])), right = Math.max(...points.map(x => x[0]));
   const top = Math.min(...points.map(x => x[1])), bottom = Math.max(...points.map(x => x[1]));
-  const scale = Math.min((canvas.width - 20) / (right - left), (canvas.height - 20) / (bottom - top));
-  const ox = canvas.width / 2 - (left + right) * scale / 2, oy = canvas.height / 2 - (top + bottom) * scale / 2;
+  const halo = item.id === 'halo', wings = item.slot === 'back';
+  const scale = halo ? 5.2 : wings ? 3.7 : Math.min((canvas.width - 20) / (right - left), (canvas.height - 20) / (bottom - top));
+  const ox = canvas.width / 2 - (halo || wings ? 0 : (left + right) * scale / 2);
+  const oy = canvas.height / 2 + (halo ? 14.1 * scale : wings ? -4.2 * scale : -(top + bottom) * scale / 2);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   faces.sort((a, b) => b.depth - a.depth);
   for (const face of faces) {
-    ctx.fillStyle = face.color;
+    const points = face.points.map(([x, y]) => [ox + x * scale, oy + y * scale]);
     ctx.beginPath();
-    for (const point of face.points) ctx.lineTo(ox + point[0] * scale, oy + point[1] * scale);
+    for (const point of points) ctx.lineTo(...point);
     ctx.closePath();
-    ctx.fill();
+    if (face.uv && styleTexture.complete && styleTexture.naturalWidth) {
+      const [a, b, , d] = points;
+      const [u, v, w, h] = face.uv;
+      ctx.save();
+      ctx.clip();
+      ctx.transform((b[0]-a[0])/w, (b[1]-a[1])/w, (d[0]-a[0])/h, (d[1]-a[1])/h, a[0], a[1]);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(styleTexture, u, v, w, h, 0, 0, w, h);
+      ctx.fillStyle = `rgba(10, 8, 25, ${(1 - face.shade) * .66})`;
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = face.color;
+      ctx.fill();
+    }
   }
 }
 

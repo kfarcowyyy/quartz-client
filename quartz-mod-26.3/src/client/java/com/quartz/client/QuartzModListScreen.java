@@ -17,7 +17,9 @@ import java.util.Locale;
 import java.util.zip.ZipFile;
 
 public class QuartzModListScreen extends QuartzSafeScreen {
-    private record Mod(Path file, String name, boolean enabled, boolean managed, QuartzHudModule module) {}
+    private record Mod(Path file, String name, boolean enabled, boolean managed, QuartzHudModule module) {
+        boolean chat() { return file == null && module == null; }
+    }
     private final Screen parent;
     private final List<Mod> mods = new ArrayList<>();
     private int firstRow, lastRow, columns, rows, left, bodyWidth, sidebar, cardWidth, limit, contentLeft;
@@ -90,6 +92,11 @@ public class QuartzModListScreen extends QuartzSafeScreen {
     private void scan() {
         mods.clear();
         if (!installed) {
+            boolean smooth = QuartzConfig.data.smoothChat;
+            String chat = QuartzText.of("Smooth Chat", "Płynny czat").getString();
+            if (matches(smooth, "Smooth Chat") || matches(smooth, chat)) {
+                mods.add(new Mod(null, chat, smooth, false, null));
+            }
             for (QuartzHudModule module : QuartzHudModule.values()) {
                 boolean enabled = module.settings().enabled;
                 if (matches(enabled, module.en) || matches(enabled, module.label().getString())) {
@@ -165,8 +172,9 @@ public class QuartzModListScreen extends QuartzSafeScreen {
     }
 
     private void toggle(Mod mod) {
-        if (mod.module() != null) {
-            mod.module().settings().enabled = !mod.enabled();
+        if (mod.file() == null) {
+            if (mod.chat()) QuartzConfig.data.smoothChat = !mod.enabled();
+            else mod.module().settings().enabled = !mod.enabled();
             QuartzConfig.save();
             rebuildWidgets();
             return;
@@ -214,6 +222,10 @@ public class QuartzModListScreen extends QuartzSafeScreen {
                 } finally {
                     g.disableScissor();
                 }
+            } else if (mod.chat()) {
+                var caption = QuartzText.of("Animated message arrivals", "Animowane pojawianie się wiadomości");
+                g.text(font, font.plainSubstrByWidth(caption.getString(), cardWidth - 16),
+                        x + 8, y + 27, QuartzTheme.MUTED, false);
             } else {
                 g.text(font, mod.enabled() ? QuartzText.of("Enabled", "Włączony") : QuartzText.of("Disabled", "Wyłączony"),
                         x + 8, y + 27, QuartzTheme.MUTED, false);

@@ -2,6 +2,10 @@
 (() => {
   const en = {
     Kosmetyki: 'Cosmetics',
+    'Usunąć instancję?': 'Remove instance?', 'Instancja i jej pliki zostaną usunięte.': 'The instance and its files will be deleted.',
+    'Usunąć plik?': 'Remove file?', 'Plik zostanie usunięty z instancji.': 'The file will be removed from the instance.',
+    'Usunąć skina?': 'Remove skin?', 'Skin zostanie usunięty z garderoby.': 'The skin will be removed from your wardrobe.',
+    Anuluj: 'Cancel',
     Graj: 'Play', Instancje: 'Instances', Przeglądaj: 'Browse', Konto: 'Account', Ustawienia: 'Settings',
     Niezalogowano: 'Not signed in', 'Wejdź w zakładkę Konto': 'Open the Account tab',
     'Gotowy do gry?': 'Ready to play?', 'Wybierz instancję i uruchom. Wszystko pobierze się samo.': 'Choose an instance and launch. The required files download automatically.',

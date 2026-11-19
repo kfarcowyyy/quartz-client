@@ -33,6 +33,7 @@ dependencies {
 processResources {
     from('../src/style-catalog.json') { into 'assets/quartz' }
     from('../renderer/style-material.png') { into 'assets/quartz/textures/wardrobe' }
+    from('../renderer/web-suit.png') { into 'assets/quartz/textures/wardrobe' }
     from('../renderer/style-previews.png') { into 'assets/quartz/textures/wardrobe' }
     inputs.property 'version', project.version
     filesMatching('fabric.mod.json') { expand version: project.version }
