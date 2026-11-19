@@ -11,8 +11,6 @@ function bundledFiles({ loader, mcVersion }) {
   return sources.every(file => fs.existsSync(file)) ? sources : null;
 }
 
-function available(instance) { return Boolean(bundledFiles(instance)); }
-
 function install(instance) {
   const sources = bundledFiles(instance);
   if (!sources) return false;
@@ -35,4 +33,4 @@ function install(instance) {
   return true;
 }
 
-module.exports = { install, available };
+module.exports = { install };

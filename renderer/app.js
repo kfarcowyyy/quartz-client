@@ -223,7 +223,6 @@ function openNewInstance() {
         <option value="vanilla">Vanilla (bez modów)</option>
       </select>
     </label>
-    <small class="sub" id="n-quartz-status" aria-live="polite"></small>
     <label class="check"><input type="checkbox" id="n-voice" ${state.settings.voicechat ? 'checked' : ''}/> Simple Voice Chat</label>
     <div class="row" style="justify-content:flex-end;margin-top:8px">
       <button class="btn" id="n-cancel">Anuluj</button>
@@ -236,18 +235,11 @@ function openNewInstance() {
   const refresh = $('#n-refresh', root);
   const create = $('#n-ok', root);
   const loader = $('#n-loader', root);
-  const quartzStatus = $('#n-quartz-status', root);
   addQuartzPicker(select);
   addQuartzPicker(loader);
   let loading = false;
   let creating = false;
   let creationVersions = [];
-  const describeQuartz = () => {
-    const selected = creationVersions.find(item => item.id === select.value);
-    quartzStatus.textContent = !selected || loader.value === 'vanilla' ? ''
-      : selected.quartzLoaders.includes(loader.value) ? 'Mod Quartz zostanie dodany automatycznie.'
-        : 'Mod Quartz nie jest dostępny dla tej wersji i loadera.';
-  };
   const fill = () => {
     const previous = select.value;
     const groups = new Map();
@@ -260,7 +252,6 @@ function openNewInstance() {
     if (Array.from(select.options).some(option => option.value === previous)) select.value = previous;
     select.disabled = !select.value;
     create.disabled = creating || !select.value;
-    describeQuartz();
   };
   const versionsInDialog = async (force = false) => {
     if (loading) return;
@@ -289,8 +280,6 @@ function openNewInstance() {
     }
   };
   fill();
-  select.addEventListener('change', describeQuartz);
-  loader.addEventListener('change', describeQuartz);
   refresh.addEventListener('click', () => versionsInDialog(true));
   versionsInDialog();
   $('#n-cancel').addEventListener('click', () => (root.innerHTML = ''));
@@ -331,7 +320,7 @@ function viewBrowse() {
     .map((i) => `<option value="${esc(i.id)}" ${i.id === state.selected ? 'selected' : ''}>${esc(i.name)} (${esc(i.mcVersion)})</option>`)
     .join('');
   const isPack = b.type === 'modpack';
-  const packVersions = state.versions.filter(v => v.type === 'release' || v.id === b.packVersion)
+  const packVersions = state.versions
     .map(v => `<option value="${esc(v.id)}" ${v.id === b.packVersion ? 'selected' : ''}>${esc(v.id)}</option>`).join('');
   const filters = isPack ? `
     <select id="b-version" aria-label="Wersja Minecrafta">
@@ -386,10 +375,10 @@ let packVersionRequest;
 
 function loadPackVersions() {
   packVersionRequest ??= (async () => {
-    const local = await api('versions:list');
+    const local = await api('versions:list', { creationOnly: true });
     state.versions = local.items;
     if (state.page === 'browse' && state.browse.type === 'modpack') render();
-    const latest = await api('versions:list', { refresh: true });
+    const latest = await api('versions:list', { creationOnly: true, refresh: true });
     state.versions = latest.items;
     if (state.page === 'browse' && state.browse.type === 'modpack') render();
   })().catch(error => toast(error.message, true)).finally(() => { packVersionRequest = null; });

@@ -36,7 +36,17 @@ jobs:
         if: matrix.target.port
         run: python3 scripts/prepare-quartz-port.py ${{ matrix.target.id }} ${{ matrix.target.project }}
       - name: Compile Quartz mod
-        run: gradle -p ${{ matrix.target.project }} -Pminecraft_version=${{ matrix.target.id }} -Pfabric_api_version=${{ matrix.target.api }} build
+        shell: bash
+        run: |
+          args=(-p "${{ matrix.target.project }}" "-Pminecraft_version=${{ matrix.target.id }}" "-Pfabric_api_version=${{ matrix.target.api }}" build)
+          log="$RUNNER_TEMP/gradle-build.log"
+          set -o pipefail
+          if gradle "${args[@]}" 2>&1 | tee "$log"; then exit 0; fi
+          if grep -qiE 'Could not resolve all artifacts|Could not GET|Read timed out' "$log"; then
+            gradle "${args[@]}" --refresh-dependencies
+          else
+            exit 1
+          fi
       - name: Stage the runtime mod JAR
         shell: bash
         run: |

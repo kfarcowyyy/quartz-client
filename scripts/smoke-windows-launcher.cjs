@@ -49,6 +49,7 @@ async function boot(profile) {
     }
     assert.ok(listed.every(value => /^(?:1\.(?:1[5-9]|2[01])|26\.\d+)(?:\.\d+)?$/.test(value)));
     assert.equal(await window.locator('#n-snap').count(), 0);
+    assert.equal(await window.locator('#n-quartz-status').count(), 0);
     await window.locator('#n-ver + .quartz-picker-trigger').click();
     await window.locator('#n-ver-choices [role=option]').filter({ hasText: /^1\.15\.1$/ }).click();
     assert.equal(await window.locator('#n-ver').inputValue(), '1.15.1');

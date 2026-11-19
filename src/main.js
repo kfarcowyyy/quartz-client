@@ -91,15 +91,7 @@ function createWindow() {
 }
 
 // ---- IPC ----
-handle('versions:list', async (opts) => {
-  const result = await versions.list(opts);
-  if (opts?.creationOnly) {
-    for (const item of result.items) {
-      item.quartzLoaders = ['fabric', 'quilt'].filter(loader => quartzMod.available({ loader, mcVersion: item.id }));
-    }
-  }
-  return result;
-});
+handle('versions:list', (opts) => versions.list(opts));
 function publicSettings({ account, ...settings }) { return settings; }
 handle('settings:get', () => publicSettings(store.get()));
 handle('settings:set', (patch) => {
