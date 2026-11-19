@@ -120,14 +120,84 @@ def prepare_pre_submit(root):
     layer.write_text(source, encoding="utf-8")
 
 
+def prepare_pre_pipeline(root):
+    client = root / "src/client/java/com/quartz/client"
+    replace_in(client / "QuartzModClient.java", [
+        ("import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;",
+         "import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;"),
+        ("import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;\n", ""),
+        ('HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT,\n'
+         '                ResourceLocation.fromNamespaceAndPath("quartz", "in_game_hud"), (graphics, tickCounter) -> {',
+         'HudRenderCallback.EVENT.register((graphics, tickCounter) -> {'),
+    ])
+    for file in (root / "src").rglob("*.java"):
+        replace_in(file, [
+            ("import net.minecraft.client.renderer.RenderPipelines;", "import net.minecraft.client.renderer.RenderType;"),
+            ("net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED",
+             "net.minecraft.client.renderer.RenderType::guiTextured"),
+            ("RenderPipelines.GUI_TEXTURED", "RenderType::guiTextured"),
+            ("pose.pushMatrix()", "pose.pushPose()"),
+            ("pose.popMatrix()", "pose.popPose()"),
+        ])
+    replace_in(client / "QuartzHud.java", [
+        ("y + (height - panel.height() * scale) / 2);", "y + (height - panel.height() * scale) / 2, 0);"),
+        ("pose.scale(scale, scale);", "pose.scale(scale, scale, 1);"),
+        (", top + 12).scale(0.67f, 0.67f);", ", top + 12, 0);\n                    pose.scale(0.67f, 0.67f, 1);"),
+        ("pose.translate(horizontal ? x : x + ARMOR_THICKNESS, y);",
+         "pose.translate(horizontal ? x : x + ARMOR_THICKNESS, y, 0);"),
+        ("pose.rotate((float) (Math.PI / 2));", "pose.mulPose(com.mojang.math.Axis.ZP.rotationDegrees(90));"),
+    ])
+    replace_in(client / "QuartzTheme.java", [
+        ("pose.translate(x, y).scale(0.5f, 0.5f);", "pose.translate(x, y, 0);\n            pose.scale(0.5f, 0.5f, 1);"),
+    ])
+    chat = client / "mixin/QuartzChatMixin.java"
+    replace_in(chat, [
+        ("import org.spongepowered.asm.mixin.injection.ModifyArgs;",
+         "import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;"),
+        ("import org.spongepowered.asm.mixin.injection.invoke.arg.Args;\n", ""),
+        ("@Unique private long quartz$frameTime;", "@Unique private long quartz$frameTime;\n    @Unique private int quartz$frameTick;"),
+        ("quartz$frameTime = now;", "quartz$frameTime = now;\n        quartz$frameTick = tick;"),
+        ("pose.translate(0f, 5f * (1f - quartz$progress(now - quartz$lastArrival)));",
+         "pose.translate(0f, 5f * (1f - quartz$progress(now - quartz$lastArrival)), 0);"),
+    ])
+    source = chat.read_text(encoding="utf-8")
+    start = source.index("    @ModifyArgs(")
+    end = source.index("    @Unique", start)
+    source = source[:start] + '''    @WrapOperation(method = "render(Lnet/minecraft/client/gui/GuiGraphics;IIIZ)V",
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/components/ChatComponent;getTimeFactor(I)D"))
+    private double quartz$fadeNewMessages(int age, Operation<Double> original) {
+        double opacity = original.call(age);
+        if (quartz$frameTime == 0L) return opacity;
+        Long arrival = quartz$arrivals.get(quartz$frameTick - age);
+        return arrival == null ? opacity
+                : opacity * (.12f + .88f * quartz$progress(quartz$frameTime - arrival));
+    }
+
+''' + source[end:]
+    chat.write_text(source, encoding="utf-8")
+
+
+def prepare_older_texture_constructor(root):
+    for file in (root / "src").rglob("*.java"):
+        replace_in(file, [
+            ("new DynamicTexture(path.getFileName()::toString, image)", "new DynamicTexture(image)"),
+            ('new DynamicTexture(() -> "Quartz imported skin", image)', "new DynamicTexture(image)"),
+            ('new DynamicTexture(() -> "Modrinth image", image)', "new DynamicTexture(image)"),
+        ])
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("version")
 parser.add_argument("project", type=Path)
 args = parser.parse_args()
-if args.version in {"1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10"}:
+if args.version in {"1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10"}:
     prepare_remapped(args.project)
-    if args.version in {"1.21.6", "1.21.7", "1.21.8"}:
+    if args.version in {"1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8"}:
         prepare_pre_submit(args.project)
+    if args.version in {"1.21.2", "1.21.3", "1.21.4", "1.21.5"}:
+        prepare_pre_pipeline(args.project)
+    if args.version in {"1.21.2", "1.21.3", "1.21.4"}:
+        prepare_older_texture_constructor(args.project)
 elif args.version in {"26.1", "26.1.1", "26.1.2", "26.2"}:
     prepare_named(args.project)
     if args.version.startswith("26.1"):
