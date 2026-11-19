@@ -475,6 +475,37 @@ def prepare_legacy_effect_and_chat_apis(root):
     ])
 
 
+def prepare_1201_screen_apis(root):
+    client = root / "src/client/java/com/quartz/client"
+    for file in (root / "src").rglob("*.java"):
+        replace_in(file, [
+            ("mouseScrolled(double x, double y, double dx, double dy)",
+             "mouseScrolled(double x, double y, double dy)"),
+            ("super.mouseScrolled(x, y, dx, dy)", "super.mouseScrolled(x, y, dy)"),
+        ])
+    replace_in(client / "QuartzTitleScreen.java", [
+        ("renderBackground(GuiGraphics g, int x, int y, float delta)", "renderBackground(GuiGraphics g)"),
+    ])
+    replace_in(client / "QuartzWardrobeScreen.java", [
+        ("            if (player != null) net.minecraft.client.gui.screens.inventory.InventoryScreen.renderEntityInInventoryFollowsMouse(\n"
+         "                    g, x + 3, y + 5, left + span - 3, bottom - 3, Math.max(14, Math.min(32, (bottom - y) / 3)), 0, mx, my, player);",
+         ""),
+    ])
+    wardrobe = client / "QuartzWardrobe.java"
+    source = wardrobe.read_text(encoding="utf-8")
+    source = source.replace("import net.minecraft.core.ClientAsset;\n", "")
+    source = source.replace("import net.minecraft.world.entity.player.PlayerModelType;\n", "")
+    source = source.replace("import net.minecraft.world.entity.player.PlayerSkin;\n", "")
+    source = source.replace("    private static PlayerModelType model = PlayerModelType.WIDE;\n", "")
+    source = source.replace("            model = id.endsWith(\"-slim\") ? PlayerModelType.SLIM : PlayerModelType.WIDE;\n", "")
+    source = re.sub(r"\n    public static PlayerSkin apply\(PlayerSkin account\) \{.*?\n    \}\n}", "\n}", source, flags=re.S)
+    wardrobe.write_text(source, encoding="utf-8")
+    (client / "mixin/QuartzPlayerSkinMixin.java").write_text(
+        "package com.quartz.client.mixin;\n", encoding="utf-8")
+    mixins = root / "src/client/resources/quartz.client.mixins.json"
+    replace_in(mixins, [('", "QuartzPlayerSkinMixin"', '"')])
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("version")
 parser.add_argument("project", type=Path)
@@ -485,6 +516,8 @@ if args.version in {"1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", 
     prepare_remapped(args.project)
     if args.version in {"1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
         prepare_legacy_effect_and_chat_apis(args.project)
+    if args.version == "1.20.1":
+        prepare_1201_screen_apis(args.project)
     if args.version in {"1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8"}:
         prepare_pre_submit(args.project)
     if args.version in {"1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5"}:
