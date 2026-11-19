@@ -761,8 +761,95 @@ def prepare_pre_1193_names(root):
             ("net.minecraft.core.registries.BuiltInRegistries.", "net.minecraft.core.Registry."),
             ("import com.mojang.math.Axis;", "import com.mojang.math.Vector3f;"),
             ("com.mojang.math.Axis.ZP.", "com.mojang.math.Vector3f.ZP."),
+            ("sprite.atlasLocation()", "net.minecraft.world.inventory.InventoryMenu.BLOCK_ATLAS"),
             ("Axis.YP.", "Vector3f.YP."), ("Axis.ZP.", "Vector3f.ZP."),
         ])
+
+
+def prepare_legacy_fps(root):
+    client = root / "src/client/java/com/quartz/client"
+    replace_in(client / "QuartzHud.java", [
+        ("client.getFps()", "com.quartz.client.mixin.QuartzFpsAccessor.quartz$getFps()"),
+    ])
+    (client / "mixin/QuartzFpsAccessor.java").write_text('''package com.quartz.client.mixin;
+
+import net.minecraft.client.Minecraft;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.gen.Accessor;
+
+@Mixin(Minecraft.class)
+public interface QuartzFpsAccessor {
+    @Accessor("fps")
+    static int quartz$getFps() {
+        throw new AssertionError("Mixin has not been applied");
+    }
+}
+''', encoding="utf-8")
+    replace_in(root / "src/client/resources/quartz.client.mixins.json", [
+        ('"client": [', '"client": ["QuartzFpsAccessor", '),
+    ])
+    replace_in(client / "QuartzButton.java", [
+        (", DEFAULT_NARRATION);", ");"),
+        ("getX()", "x"), ("getY()", "y"),
+    ])
+
+
+def prepare_pre_119_text_and_chat(root):
+    client = root / "src/client/java/com/quartz/client"
+    for file in client.rglob("*.java"):
+        replace_in(file, [
+            ("Component.literal(", "new net.minecraft.network.chat.TextComponent("),
+            ("Component.translatable(", "new net.minecraft.network.chat.TranslatableComponent("),
+            ("Component.empty()", 'new net.minecraft.network.chat.TextComponent("")'),
+        ])
+    replace_in(client / "mixin/QuartzChatMixin.java", [
+        ("Lnet/minecraft/network/chat/MessageSignature;ILnet/minecraft/client/GuiMessageTag;Z", "IIZ"),
+        ("net.minecraft.network.chat.MessageSignature signature, int tick, net.minecraft.client.GuiMessageTag tag,",
+         "int messageId, int tick,"),
+        ("Lcom/mojang/blaze3d/vertex/PoseStack;III)V", "Lcom/mojang/blaze3d/vertex/PoseStack;I)V"),
+        ("PoseStack graphics, int tick, int mouseX, int mouseY,", "PoseStack graphics, int tick,"),
+        ("original.call(graphics, tick, mouseX, mouseY)", "original.call(graphics, tick)"),
+    ])
+
+
+def gson_compatible_class(access, name, fields):
+    declaration = "".join(f"        private {kind} {field};\n" for kind, field in fields)
+    arguments = ", ".join(f"{kind} {field}" for kind, field in fields)
+    assign = "".join(f"            this.{field} = {field};\n" for _, field in fields)
+    getters = "".join(f"        public {kind} {field}() {{ return {field}; }}\n" for kind, field in fields)
+    return (f"{access} static final class {name} {{\n{declaration}\n"
+            f"        {name}({arguments}) {{\n{assign}        }}\n\n{getters}")
+
+
+def prepare_legacy_json(root):
+    client = root / "src/client/java/com/quartz/client"
+    classes = {
+        "QuartzStyle.java": [
+            ("public", "Box", [("String", "bone"), *(("float", k) for k in "xyzwhd"),
+                               ("String", "color"), ("int[]", "uv")], True),
+            ("public", "Accessory", [("String", k) for k in ("id", "en", "pl", "slot")]
+                                   + [("List<Box>", "boxes")], True),
+            ("public", "Emote", [("String", k) for k in ("id", "en", "pl")]
+                                + [("double", "seconds")], True),
+            ("private", "Catalog", [("List<Accessory>", "cosmetics"), ("List<Emote>", "emotes")], False),
+        ],
+        "QuartzWardrobe.java": [
+            ("private", "Selection", [("String", "skin")], False),
+            ("", "Cape", [("String", "name"), ("boolean", "active")], False),
+            ("private", "Metadata", [("String", "name")], False),
+        ],
+    }
+    for filename, records in classes.items():
+        substitutions = []
+        for access, name, fields, has_body in records:
+            modifier = f"{access} " if access else ""
+            arguments = ", ".join(f"{kind} {field}" for kind, field in fields)
+            original = f"    {modifier}record {name}({arguments}) {{" + ("\n" if has_body else "}")
+            replacement = "    " + gson_compatible_class(access, name, fields).lstrip()
+            if not has_body:
+                replacement += "    }"
+            substitutions.append((original, replacement))
+        replace_in(client / filename, substitutions)
 
 
 parser = argparse.ArgumentParser()
@@ -771,21 +858,21 @@ parser.add_argument("project", type=Path)
 args = parser.parse_args()
 if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.16.3", "1.16.4", "1.16.5", "1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
     prepare_legacy_style_networking(args.project)
-if args.version in {"1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10"}:
+if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10"}:
     prepare_remapped(args.project)
-    if args.version in {"1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
+    if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
         prepare_legacy_effect_and_chat_apis(args.project)
-    if args.version in {"1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8"}:
+    if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8"}:
         prepare_pre_submit(args.project)
-    if args.version in {"1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5"}:
+    if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5"}:
         prepare_pre_pipeline(args.project)
-    if args.version in {"1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
+    if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
         prepare_legacy_chat_rendering(args.project)
-    if args.version in {"1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4"}:
+    if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4"}:
         prepare_older_texture_constructor(args.project)
-    if args.version in {"1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1"}:
+    if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1"}:
         prepare_entity_based_player_rendering(args.project)
-    if args.version in {"1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6"}:
+    if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6"}:
         for file in (args.project / "src").rglob("*.java"):
             replace_in(file, [
                 ("net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(", "new net.minecraft.resources.ResourceLocation("),
@@ -808,17 +895,26 @@ if args.version in {"1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.2
     }
 }
 """, encoding="utf-8")
-    if args.version in {"1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1"}:
+    if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1"}:
         prepare_1201_screen_apis(args.project)
         prepare_legacy_hud_textures(args.project)
-    if args.version in {"1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1"}:
+    if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1"}:
         prepare_legacy_skin(args.project)
-    if args.version.startswith("1.19"):
+    if args.version.split(".")[1] in {"17", "18", "19"}:
         prepare_pose_stack_gui(args.project)
-    if args.version in {"1.19", "1.19.1", "1.19.2", "1.19.3"}:
+    if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3"}:
         prepare_pre_1194_gui(args.project)
-    if args.version in {"1.19", "1.19.1", "1.19.2"}:
+    if args.version in {"1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2"}:
         prepare_pre_1193_names(args.project)
+        prepare_legacy_fps(args.project)
+        prepare_legacy_json(args.project)
+    if args.version.split(".")[1] in {"17", "18"}:
+        prepare_pre_119_text_and_chat(args.project)
+    if args.version in {"1.17", "1.17.1"}:
+        for file in (args.project / "src").rglob("*.java"):
+            replace_in(file, [("org.slf4j.LoggerFactory", "org.apache.logging.log4j.LogManager"),
+                              ("org.slf4j.Logger", "org.apache.logging.log4j.Logger"),
+                              ("LoggerFactory.getLogger", "LogManager.getLogger")])
     if args.version == "1.20.5":
         replace_in(args.project / "src/main/java/com/quartz/QuartzServerStyle.java", [
             ("context.server()", "context.player().server"),
