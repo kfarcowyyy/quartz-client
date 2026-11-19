@@ -5,6 +5,7 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
@@ -12,7 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.lwjgl.glfw.GLFW;
 
 public final class QuartzModClient implements ClientModInitializer {
-    private static KeyMapping openMenu;
+    private static KeyMapping openMenu, stopwatch;
 
     @Override
     public void onInitializeClient() {
@@ -21,9 +22,21 @@ public final class QuartzModClient implements ClientModInitializer {
         openMenu = KeyBindingHelper.registerKeyBinding(new KeyMapping(
                 "key.quartz.open_menu", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_RIGHT_SHIFT,
                 KeyMapping.Category.MISC));
+        stopwatch = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+                "Quartz · Stopwatch", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_K,
+                KeyMapping.Category.MISC));
+        net.fabricmc.fabric.api.event.player.AttackEntityCallback.EVENT.register((player, world, hand, target, hit) -> {
+            Minecraft client = Minecraft.getInstance();
+            if (client.player == player && QuartzHudModule.REACH.settings().enabled) QuartzHud.attack(client, target);
+            return net.minecraft.world.InteractionResult.PASS;
+        });
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             QuartzTitleScreen.replaceVanilla(client);
             QuartzWardrobe.tick();
+            QuartzHud.tick(client);
+            while (stopwatch.consumeClick()) {
+                if (client.player != null && QuartzHudModule.STOPWATCH.settings().enabled) QuartzHud.toggleStopwatch();
+            }
             QuartzShotPreview.tick();
             while (openMenu.consumeClick()) {
                 if (client.screen == null && client.player != null) {
@@ -38,20 +51,11 @@ public final class QuartzModClient implements ClientModInitializer {
                 }
             }
         });
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath("quartz", "main_hud"), (graphics, tickCounter) -> {
+        HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT,
+                Identifier.fromNamespaceAndPath("quartz", "in_game_hud"), (graphics, tickCounter) -> {
             Minecraft client = Minecraft.getInstance();
+            if (client.player != null && !(client.screen instanceof QuartzHudEditorScreen)) QuartzHud.inGame(graphics, client);
             if (!client.options.hideGui) QuartzShotPreview.popup(graphics);
-            if (!QuartzConfig.data.hudEnabled || client.options.hideGui || client.player == null
-                    || client.screen instanceof QuartzHudEditorScreen) return;
-            String text = QuartzConfig.hudTemplate()
-                    .replace("{fps}", Integer.toString(client.getFps()))
-                    .replace("{cps}", QuartzConfig.cps());
-            text = client.font.plainSubstrByWidth(text, Math.max(0, graphics.guiWidth() - 12));
-            int width = client.font.width(text) + 12;
-            int x = Math.max(0, Math.min(QuartzConfig.data.hudX, graphics.guiWidth() - width));
-            int y = Math.max(0, Math.min(QuartzConfig.data.hudY, graphics.guiHeight() - 18));
-            graphics.fill(x, y, x + width, y + 18, QuartzConfig.data.background);
-            graphics.drawString(client.font, text, x + 6, y + 5, QuartzConfig.data.foreground, false);
         });
     }
 }
