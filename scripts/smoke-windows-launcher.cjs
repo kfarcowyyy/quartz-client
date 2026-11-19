@@ -36,7 +36,7 @@ async function boot(profile) {
       timeout: 15000,
     });
     assert.deepEqual(await window.locator('#b-loader option').evaluateAll(options => options.map(option => option.value)),
-      ['', 'fabric', 'quilt']);
+      ['', 'fabric']);
     assert.equal(await window.locator('#b-inst').count(), 0);
     await window.evaluate(() => { go('play'); openNewInstance(); });
     await window.waitForFunction(() => {
