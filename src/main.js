@@ -177,12 +177,16 @@ handle('browse:search', (p) => {
   return modrinth.search(p);
 });
 
-handle('browse:install', async ({ provider, type, project, instanceId }) => {
+handle('browse:install', async ({ provider, type, project, instanceId, mcVersion, loader }) => {
   if (type === 'modpack') {
     if (provider !== 'modrinth') throw new Error('Modpacki na razie tylko z Modrinth');
-    return mrpack.installFromModrinth(project.id, (s) => send('status', s), {
+    const instance = await mrpack.installFromModrinth(project.id, (s) => send('status', s), {
       voicechat: store.get().voicechat,
+      mcVersion,
+      loader,
     });
+    quartzMod.install(instance);
+    return instance;
   }
   const inst = instances.get(instanceId);
   if (!inst) throw new Error('Wybierz instancję');

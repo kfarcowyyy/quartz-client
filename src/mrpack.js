@@ -23,6 +23,9 @@ async function importMrpack(file, onStatus, opts = {}) {
     throw new Error('Ten modpack wymaga Forge/NeoForge - wsparcie dojdzie w etapie 2');
   }
 
+  if ((opts.mcVersion && deps.minecraft !== opts.mcVersion) || (opts.loader && loader !== opts.loader)) {
+    throw new Error('Pobrany modpack nie pasuje do wybranych filtrów.');
+  }
   const inst = instances.create({ name: index.name || 'Modpack', mcVersion: deps.minecraft, loader });
   const dir = paths.instDir(inst.id);
 
@@ -53,12 +56,15 @@ async function importMrpack(file, onStatus, opts = {}) {
 
 async function installFromModrinth(projectId, onStatus, opts) {
   onStatus && onStatus('Pobieram modpack...');
-  const f = await modrinth.latestModpackFile(projectId);
-  const tmp = path.join(os.tmpdir(), f.filename);
-  await download(f.url, tmp);
-  const inst = await importMrpack(tmp, onStatus, opts);
-  fs.rmSync(tmp, { force: true });
-  return inst;
+  const f = await modrinth.latestModpackFile(projectId, opts);
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'quartz-pack-'));
+  const tmp = path.join(folder, 'download.mrpack');
+  try {
+    await download(f.url, tmp);
+    return await importMrpack(tmp, onStatus, opts);
+  } finally {
+    fs.rmSync(folder, { recursive: true, force: true });
+  }
 }
 
 module.exports = { importMrpack, installFromModrinth };

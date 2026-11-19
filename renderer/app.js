@@ -36,7 +36,8 @@ const state = {
   progress: 0,
   playing: false,
   detail: { id: null, tab: 'all', items: null, q: '', rows: [] },
-  browse: { provider: 'modrinth', type: 'mod', query: '', results: [], loading: false },
+  browse: { provider: 'modrinth', type: 'mod', query: '', results: [], loading: false,
+    packVersion: '', packLoader: '', request: 0, searched: false },
 };
 
 function toast(msg, err = false) {
@@ -285,6 +286,18 @@ function viewBrowse() {
   const instOpts = state.instances
     .map((i) => `<option value="${esc(i.id)}" ${i.id === state.selected ? 'selected' : ''}>${esc(i.name)} (${esc(i.mcVersion)})</option>`)
     .join('');
+  const isPack = b.type === 'modpack';
+  const packVersions = state.versions.filter(v => v.type === 'release' || v.id === b.packVersion)
+    .map(v => `<option value="${esc(v.id)}" ${v.id === b.packVersion ? 'selected' : ''}>${esc(v.id)}</option>`).join('');
+  const filters = isPack ? `
+    <select id="b-version" aria-label="Wersja Minecrafta">
+      <option value="">Wszystkie wersje</option>${packVersions}
+    </select>
+    <select id="b-loader" aria-label="Loader modpacka">
+      <option value="">Wszystkie loadery</option>
+      <option value="fabric" ${b.packLoader === 'fabric' ? 'selected' : ''}>Fabric</option>
+      <option value="quilt" ${b.packLoader === 'quilt' ? 'selected' : ''}>Quilt</option>
+    </select>` : `<select id="b-inst" aria-label="Instancja">${instOpts}</select>`;
   const results = b.results
     .map(
       (r, idx) => `
@@ -316,30 +329,58 @@ function viewBrowse() {
     </div>
     <div class="row" style="margin-bottom:6px">
       <input id="q" class="grow" placeholder="Szukaj..." value="${esc(b.query)}" />
-      <select id="b-inst">${instOpts}</select>
+      ${filters}
       <button class="btn primary" id="q-go">${icon('search', 18)} Szukaj</button>
     </div>
     <p class="sub" style="font-size:13px;margin:8px 2px 16px">${hint}</p>
-    <div id="results">${b.loading ? '<div class="empty">Szukam...</div>' : results || '<div class="empty">Wpisz frazę albo kliknij Szukaj, żeby zobaczyć popularne.</div>'}</div>
+    <div id="results">${b.loading ? '<div class="empty">Szukam...</div>' : results || (b.searched ? '<div class="empty">Brak pasujących wyników.</div>'
+      : '<div class="empty">Wpisz frazę albo kliknij Szukaj, żeby zobaczyć popularne.</div>')}</div>
   </div>`;
+}
+
+let packVersionRequest;
+
+function loadPackVersions() {
+  packVersionRequest ??= (async () => {
+    const local = await api('versions:list');
+    state.versions = local.items;
+    if (state.page === 'browse' && state.browse.type === 'modpack') render();
+    const latest = await api('versions:list', { refresh: true });
+    state.versions = latest.items;
+    if (state.page === 'browse' && state.browse.type === 'modpack') render();
+  })().catch(error => toast(error.message, true)).finally(() => { packVersionRequest = null; });
+}
+
+function clearBrowseResults() {
+  const b = state.browse;
+  b.request++;
+  b.results = [];
+  b.loading = false;
+  b.searched = false;
 }
 
 async function runSearch() {
   const b = state.browse;
   const inst = selectedInstance();
+  const isPack = b.type === 'modpack';
+  const request = ++b.request;
   b.loading = true;
+  b.results = [];
   render();
   try {
-    b.results = await api('browse:search', {
+    const results = await api('browse:search', {
       provider: b.provider,
       type: b.type,
       query: b.query,
-      mcVersion: b.type === 'modpack' ? '' : inst && inst.mcVersion,
-      loader: inst && inst.loader,
+      mcVersion: isPack ? b.packVersion : inst?.mcVersion,
+      loader: isPack ? b.packLoader : inst?.loader,
     });
+    if (request !== b.request) return;
+    b.results = results;
+    b.searched = true;
   } catch (e) {
-    b.results = [];
-    toast(e.message, true);
+    if (request !== b.request) return;
+    if (state.page === 'browse') toast(e.message, true);
   }
   b.loading = false;
   if (state.page === 'browse') render();
@@ -348,12 +389,36 @@ async function runSearch() {
 function bindBrowse() {
   const b = state.browse;
   document.querySelectorAll('[data-provider]').forEach((t) =>
-    t.addEventListener('click', () => { b.provider = t.dataset.provider; b.results = []; render(); })
+    t.addEventListener('click', () => {
+      b.provider = t.dataset.provider;
+      if (b.type === 'modpack' && b.provider === 'curseforge') b.type = 'mod';
+      clearBrowseResults();
+      render();
+    })
   );
   document.querySelectorAll('[data-type]').forEach((t) =>
-    t.addEventListener('click', () => { b.type = t.dataset.type; b.results = []; render(); })
+    t.addEventListener('click', () => {
+      b.type = t.dataset.type;
+      if (b.type === 'modpack') {
+        b.provider = 'modrinth';
+        loadPackVersions();
+      }
+      clearBrowseResults();
+      render();
+    })
   );
-  $('#b-inst').addEventListener('change', (e) => { state.selected = e.target.value; });
+  $('#b-inst')?.addEventListener('change', (e) => {
+    state.selected = e.target.value;
+    runSearch();
+  });
+  $('#b-version')?.addEventListener('change', (e) => {
+    b.packVersion = e.target.value;
+    runSearch();
+  });
+  $('#b-loader')?.addEventListener('change', (e) => {
+    b.packLoader = e.target.value;
+    runSearch();
+  });
   const input = $('#q');
   input.addEventListener('input', () => (b.query = input.value));
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') runSearch(); });
@@ -368,6 +433,8 @@ function bindBrowse() {
           provider: project.provider,
           type: project.type,
           project: { id: project.id },
+          mcVersion: project.type === 'modpack' ? b.packVersion : undefined,
+          loader: project.type === 'modpack' ? b.packLoader : undefined,
           instanceId: state.selected,
         });
         toast(`Zainstalowano: ${project.title}`);
