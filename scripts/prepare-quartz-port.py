@@ -460,6 +460,91 @@ final class QuartzSocial {
 """, encoding="utf-8")
 
 
+def prepare_early_116_networking(root):
+    # The Fabric API build for 1.16/1.16.1 predates the v1 networking API.
+    server = root / "src/main/java/com/quartz/QuartzServerStyle.java"
+    client = root / "src/client/java/com/quartz/client/QuartzSocial.java"
+    replace_in(server, [
+        ("""import net.fabricmc.fabric.api.networking.v1.PacketSender;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;""",
+         """import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.network.ServerSidePacketRegistry;"""),
+        ("""        ServerPlayNetworking.registerGlobalReceiver(QuartzStylePacket.CHANNEL,
+                (server, player, handler, buffer, responseSender) -> {
+                    QuartzStylePacket packet = QuartzStylePacket.decode(buffer);
+                    server.execute(() -> receive(server, player, packet));
+                });
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
+            ServerPlayer player = handler.player;
+            if (ServerPlayNetworking.canSend(player, QuartzStylePacket.CHANNEL)) {
+                for (Look look : players.values())
+                    send(player, new QuartzStylePacket(look.actor(), look.mask(), 0));
+            }
+        });
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
+            ServerPlayer player = handler.player;
+            var look = players.remove(player.getUUID());
+            if (look != null) broadcast(server, player, new QuartzStylePacket(look.actor(), -1, 0));
+        });""",
+         """        ServerSidePacketRegistry.INSTANCE.register(QuartzStylePacket.CHANNEL, (context, buffer) -> {
+            QuartzStylePacket packet = QuartzStylePacket.decode(buffer);
+            if (context.getPlayer() instanceof ServerPlayer player) {
+                MinecraftServer server = player.getServer();
+                if (server != null) server.execute(() -> receive(server, player, packet));
+            }
+        });
+        ServerTickEvents.END_SERVER_TICK.register(server -> players.entrySet().removeIf(entry -> {
+            if (server.getPlayerList().getPlayer(entry.getKey()) != null) return false;
+            broadcast(server, null, new QuartzStylePacket(entry.getValue().actor(), -1, 0));
+            return true;
+        }));
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> players.clear());"""),
+        ("""        if (previous != null && previous.actor() != player.getId())""",
+         """        if (previous == null && ServerSidePacketRegistry.INSTANCE.canPlayerReceive(player, QuartzStylePacket.CHANNEL)) {
+            for (Look look : players.values()) send(player, new QuartzStylePacket(look.actor(), look.mask(), 0));
+        }
+        if (previous != null && previous.actor() != player.getId())"""),
+        ("ServerPlayNetworking.canSend(", "ServerSidePacketRegistry.INSTANCE.canPlayerReceive("),
+        ("ServerPlayNetworking.send(", "ServerSidePacketRegistry.INSTANCE.sendToPlayer("),
+    ])
+    replace_in(client, [
+        ("""import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;""",
+         """import net.fabricmc.fabric.api.network.ClientSidePacketRegistry;
+import net.minecraft.client.multiplayer.ClientPacketListener;"""),
+        ("    private static int sentMask", "    private static ClientPacketListener connection;\n    private static int sentMask"),
+        ("""        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> clear());
+        ClientPlayConnectionEvents.INIT.register((handler, client) -> clear());
+        ClientPlayNetworking.registerGlobalReceiver(QuartzStylePacket.CHANNEL,
+                (client, handler, buffer, responseSender) -> {
+                    QuartzStylePacket packet = QuartzStylePacket.decode(buffer);
+                    client.execute(() -> {""",
+         """        ClientSidePacketRegistry.INSTANCE.register(QuartzStylePacket.CHANNEL, (context, buffer) -> {
+                    QuartzStylePacket packet = QuartzStylePacket.decode(buffer);
+                    Minecraft client = Minecraft.getInstance();
+                    ClientPacketListener handler = client.getConnection();
+                    client.execute(() -> {
+                        if (handler == null || handler != client.getConnection()) return;
+                        updateConnection(client);"""),
+        ("""    static void tick(Minecraft client) {
+        if (client.player == null || client.getConnection() == null) return;""",
+         """    private static void updateConnection(Minecraft client) {
+        if (connection != client.getConnection()) {
+            clear();
+            connection = client.getConnection();
+        }
+    }
+
+    static void tick(Minecraft client) {
+        updateConnection(client);
+        if (client.player == null || connection == null) return;"""),
+        ("ClientPlayNetworking.canSend(", "ClientSidePacketRegistry.INSTANCE.canServerReceive("),
+        ("ClientPlayNetworking.send(", "ClientSidePacketRegistry.INSTANCE.sendToServer("),
+    ])
+
+
 def prepare_legacy_effect_and_chat_apis(root):
     client = root / "src/client/java/com/quartz/client"
     replace_in(client / "QuartzHud.java", [
@@ -1251,6 +1336,8 @@ parser.add_argument("project", type=Path)
 args = parser.parse_args()
 if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.16.3", "1.16.4", "1.16.5", "1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
     prepare_legacy_style_networking(args.project)
+    if args.version in {"1.16", "1.16.1"}:
+        prepare_early_116_networking(args.project)
 if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.16.3", "1.16.4", "1.16.5", "1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10"}:
     prepare_remapped(args.project)
     if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.16.3", "1.16.4", "1.16.5", "1.17", "1.17.1", "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"}:
@@ -1309,7 +1396,11 @@ if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.1
         prepare_pre_1191_chat(args.project)
     if args.version.split(".")[1] in {"15", "16", "17", "18"} or args.version in {"1.19", "1.19.1", "1.19.2"}:
         prepare_pose_stack_chat_with_tick(args.project)
-    if args.version.split(".")[1] in {"15", "16", "17", "18"} or args.version in {"1.19", "1.19.1"}:
+    if args.version in {"1.16", "1.16.1"}:
+        replace_in(args.project / "src/main/resources/fabric.mod.json", [
+            ('"fabric-api": "*"', '"fabric-networking-v0": "*"'),
+        ])
+    elif args.version.split(".")[1] in {"15", "16", "17", "18"} or args.version in {"1.19", "1.19.1"}:
         replace_in(args.project / "src/main/resources/fabric.mod.json", [
             ('"fabric-api": "*"', '"fabric-networking-api-v1": "*"'),
         ])

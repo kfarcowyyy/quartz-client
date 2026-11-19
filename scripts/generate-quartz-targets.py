@@ -29,8 +29,13 @@ request = urllib.request.Request(url, headers={"User-Agent": "Quartz-Client-buil
 with urllib.request.urlopen(request, timeout=30) as response:
     metadata = ET.fromstring(response.read())
 published = [item.text for item in metadata.findall("./versioning/versions/version") if item.text]
-# Later APIs with these family suffixes require 1.17.1 and 1.18.1 respectively.
-exact_legacy_api = {"1.17": "0.36.0+1.17", "1.18": "0.44.0+1.18"}
+# Some family-suffixed Fabric API releases require a newer Minecraft patch.
+exact_legacy_api = {
+    "1.16": "0.13.1+build.370-1.16",
+    "1.16.1": "0.13.1+build.370-1.16",
+    "1.17": "0.36.0+1.17",
+    "1.18": "0.44.0+1.18",
+}
 targets = []
 for identifier in versions:
     parts = identifier.split(".")
