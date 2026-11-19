@@ -51,3 +51,8 @@ if args.version in {"1.21.9", "1.21.10"}:
     prepare_remapped(args.project)
 elif args.version in {"26.1", "26.1.1", "26.1.2", "26.2"}:
     prepare_named(args.project)
+    if args.version.startswith("26.1"):
+        for source in (args.project / "src").rglob("*.java"):
+            replace_in(source, [(".gui.setScreen(", ".setScreen("),
+                                (".gui.screen()", ".screen"),
+                                (".gui.hud.isHidden()", ".options.hideGui")])

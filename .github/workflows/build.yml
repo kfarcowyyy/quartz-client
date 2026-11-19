@@ -15,6 +15,8 @@ jobs:
         target:
           - { id: "1.21.9", project: "quartz-mod", api: "0.134.0+1.21.9" }
           - { id: "1.21.10", project: "quartz-mod", api: "0.138.4+1.21.10" }
+          - { id: "26.1", project: "quartz-mod-26.3", api: "0.145.0+26.1" }
+          - { id: "26.1.1", project: "quartz-mod-26.3", api: "0.145.3+26.1.1" }
           - { id: "26.1.2", project: "quartz-mod-26.3", api: "0.152.1+26.1.2" }
           - { id: "26.2", project: "quartz-mod-26.3", api: "0.160.0+26.2" }
     runs-on: ubuntu-latest
@@ -64,6 +66,26 @@ jobs:
           grep -Fx 'fabric.mod.json' dist/jar-entries.txt
           cp "$jar" "dist/Quartz-Client-Mod-${{ matrix.target.id }}.jar"
           ls -lh dist
+      - name: Launch Minecraft to its main menu
+        shell: bash
+        run: |
+          log="$RUNNER_TEMP/quartz-launch.log"
+          setsid xvfb-run -a gradle -p ${{ matrix.target.project }} -Pminecraft_version=${{ matrix.target.id }} -Pfabric_api_version=${{ matrix.target.api }} runClient > "$log" 2>&1 &
+          game=$!
+          trap 'kill -TERM -- "-$game" 2>/dev/null || true' EXIT
+          for i in {1..76}; do
+            if grep -q 'Created: .*minecraft:textures/atlas/gui.png-atlas' "$log"; then
+              sleep 5
+              if kill -0 "$game" 2>/dev/null && ! grep -qiE 'Game crashed|MixinApplyError|Critical injection failure' "$log"; then
+                echo "Minecraft ${{ matrix.target.id }} reached the main menu"
+                exit 0
+              fi
+            fi
+            kill -0 "$game" 2>/dev/null || break
+            sleep 3
+          done
+          tail -160 "$log"
+          exit 1
       - uses: actions/upload-artifact@v4
         with:
           name: quartz-client-mod-${{ matrix.target.id }}
