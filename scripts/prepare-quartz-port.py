@@ -837,6 +837,11 @@ def prepare_pre_1191_chat(root):
         ("Lnet/minecraft/network/chat/MessageSignature;ILnet/minecraft/client/GuiMessageTag;Z", "IIZ"),
         ("net.minecraft.network.chat.MessageSignature signature, int tick, net.minecraft.client.GuiMessageTag tag,",
          "int messageId, int tick,"),
+    ])
+
+
+def prepare_pose_stack_chat_with_tick(root):
+    replace_in(root / "src/client/java/com/quartz/client/mixin/QuartzChatMixin.java", [
         ("Lcom/mojang/blaze3d/vertex/PoseStack;III)V", "Lcom/mojang/blaze3d/vertex/PoseStack;I)V"),
         ("PoseStack graphics, int tick, int mouseX, int mouseY,", "PoseStack graphics, int tick,"),
         ("original.call(graphics, tick, mouseX, mouseY)", "original.call(graphics, tick)"),
@@ -1243,6 +1248,12 @@ if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.1
         prepare_legacy_widget_rebuild(args.project)
     if args.version.split(".")[1] in {"15", "16", "17", "18"} or args.version == "1.19":
         prepare_pre_1191_chat(args.project)
+    if args.version.split(".")[1] in {"15", "16", "17", "18"} or args.version in {"1.19", "1.19.1", "1.19.2"}:
+        prepare_pose_stack_chat_with_tick(args.project)
+    if args.version.split(".")[1] in {"15", "16", "17", "18"}:
+        replace_in(args.project / "src/main/resources/fabric.mod.json", [
+            ('"fabric-api": "*"', '"fabric-networking-api-v1": "*"'),
+        ])
     if args.version.split(".")[1] in {"15", "16"}:
         prepare_116_rendering(args.project)
     if args.version.startswith("1.15"):

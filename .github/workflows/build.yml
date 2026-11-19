@@ -115,8 +115,20 @@ jobs:
           project="${{ matrix.target.project }}"
           mkdir -p "$project/run"
           printf 'onboardAccessibility:false\n' > "$project/run/options.txt"
+          args=(-p "$project" "-Pminecraft_version=${{ matrix.target.id }}" "-Pfabric_api_version=${{ matrix.target.api }}")
+          assets_log="$RUNNER_TEMP/quartz-assets.log"
+          for attempt in 1 2 3; do
+            if gradle "${args[@]}" downloadAssets > "$assets_log" 2>&1; then
+              break
+            fi
+            if [[ "$attempt" == 3 ]] || ! grep -qiE 'DownloadException|Could not GET|Read timed out|Could not resolve all artifacts' "$assets_log"; then
+              tail -100 "$assets_log"
+              exit 1
+            fi
+            sleep $((attempt * 10))
+          done
           log="$RUNNER_TEMP/quartz-launch.log"
-          setsid xvfb-run -a gradle -p ${{ matrix.target.project }} -Pminecraft_version=${{ matrix.target.id }} -Pfabric_api_version=${{ matrix.target.api }} runClient > "$log" 2>&1 &
+          setsid xvfb-run -a gradle "${args[@]}" runClient > "$log" 2>&1 &
           game=$!
           trap 'kill -TERM -- "-$game" 2>/dev/null || true' EXIT
           for i in {1..76}; do
