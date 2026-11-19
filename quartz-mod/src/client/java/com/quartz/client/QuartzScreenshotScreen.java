@@ -2,7 +2,6 @@ package com.quartz.client;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
@@ -28,15 +27,15 @@ public final class QuartzScreenshotScreen extends QuartzSafeScreen {
         if (!files.isEmpty()) change(0);
         int left = width / 2;
         int bottom = height - 27;
-        var previous = addRenderableWidget(Button.builder(Component.literal("←"), b -> change(-1))
-                .bounds(left - 111, bottom, 22, 20).build());
-        var next = addRenderableWidget(Button.builder(Component.literal("→"), b -> change(1))
-                .bounds(left - 87, bottom, 22, 20).build());
+        var previous = addRenderableWidget(new QuartzButton(Component.literal("←"),
+                left - 111, bottom, 22, 20, false, () -> change(-1)));
+        var next = addRenderableWidget(new QuartzButton(Component.literal("→"),
+                left - 87, bottom, 22, 20, false, () -> change(1)));
         previous.active = next.active = files.size() > 1;
-        addRenderableWidget(Button.builder(QuartzText.of("Open folder", "Otwórz folder"), b -> QuartzFiles.openFolder("screenshots"))
-                .bounds(left - 61, bottom, 97, 20).build());
-        addRenderableWidget(Button.builder(QuartzText.of("Done", "Gotowe"), b -> onClose())
-                .bounds(left + 40, bottom, 70, 20).build());
+        addRenderableWidget(new QuartzButton(QuartzText.of("Open folder", "Otwórz folder"),
+                left - 61, bottom, 97, 20, false, () -> QuartzFiles.openFolder("screenshots")));
+        addRenderableWidget(new QuartzButton(QuartzText.of("Done", "Gotowe"),
+                left + 40, bottom, 70, 20, false, this::onClose));
     }
 
     private void change(int step) {

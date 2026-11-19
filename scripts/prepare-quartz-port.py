@@ -854,6 +854,84 @@ def prepare_legacy_json(root):
         replace_in(client / filename, substitutions)
 
 
+def prepare_legacy_text_fields(root, minor):
+    client = root / "src/client/java/com/quartz/client"
+    for file in client.glob("*.java"):
+        replace_in(file, [("new EditBox(", "new QuartzEditBox(")])
+        source = file.read_text(encoding="utf-8")
+        source = re.sub(r"(?m)^\s*(?:field|input)\.setHint\(.*\);\n", "\n", source)
+        file.write_text(source, encoding="utf-8")
+    signature = "int mouseX, int mouseY, float delta"
+    forwarded = "mouseX, mouseY, delta"
+    if minor != "15":
+        signature = "com.mojang.blaze3d.vertex.PoseStack pose, " + signature
+        forwarded = "pose, " + forwarded
+    (client / "QuartzEditBox.java").write_text(f'''package com.quartz.client;
+
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.network.chat.Component;
+
+final class QuartzEditBox extends EditBox {{
+    private final String hint;
+
+    QuartzEditBox(Font font, int x, int y, int width, int height, Component message) {{
+        super(font, x, y, width, height, message);
+        hint = message.getString();
+    }}
+
+    @Override
+    public void renderButton({signature}) {{
+        setSuggestion(getValue().isEmpty() ? hint : null);
+        super.renderButton({forwarded});
+    }}
+}}
+''', encoding="utf-8")
+
+
+def prepare_115_file_drop(root):
+    client = root / "src/client/java/com/quartz/client"
+    for filename in ("QuartzWardrobeScreen.java", "QuartzPacksScreen.java"):
+        replace_in(client / filename, [
+            ("    @Override\n    public void onFilesDrop(", "    public void onFilesDrop("),
+        ])
+    replace_in(client / "QuartzModClient.java", [
+        ("            QuartzStyle.tick();", "            QuartzFileDrop.install(client);\n            QuartzStyle.tick();"),
+    ])
+    (client / "QuartzFileDrop.java").write_text('''package com.quartz.client;
+
+import net.minecraft.client.Minecraft;
+import org.lwjgl.glfw.GLFW;
+import org.lwjgl.glfw.GLFWDropCallback;
+
+import java.nio.file.Path;
+import java.util.ArrayList;
+
+final class QuartzFileDrop {
+    private static GLFWDropCallback previous;
+    private static boolean installed;
+
+    private QuartzFileDrop() {}
+
+    static void install(Minecraft client) {
+        if (installed) return;
+        previous = GLFW.glfwSetDropCallback(client.getWindow().getWindow(), (window, count, names) -> {
+            if (previous != null) previous.invoke(window, count, names);
+            var files = new ArrayList<Path>(count);
+            for (int i = 0; i < count; i++) files.add(Path.of(GLFWDropCallback.getName(names, i)));
+            var screen = client.screen;
+            client.execute(() -> {
+                if (client.screen != screen) return;
+                if (screen instanceof QuartzWardrobeScreen wardrobe) wardrobe.onFilesDrop(files);
+                if (screen instanceof QuartzPacksScreen packs) packs.onFilesDrop(files);
+            });
+        });
+        installed = true;
+    }
+}
+''', encoding="utf-8")
+
+
 def prepare_116_rendering(root):
     client = root / "src/client/java/com/quartz/client"
     style = client / "QuartzStyleLayer.java"
@@ -1076,6 +1154,9 @@ if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.1
         prepare_116_rendering(args.project)
     if args.version.startswith("1.15"):
         prepare_115_gui(args.project)
+        prepare_115_file_drop(args.project)
+    if args.version.split(".")[1] in {"15", "16", "17", "18"}:
+        prepare_legacy_text_fields(args.project, args.version.split(".")[1])
     if args.version.split(".")[1] in {"15", "16", "17"}:
         for file in (args.project / "src").rglob("*.java"):
             replace_in(file, [("org.slf4j.LoggerFactory", "org.apache.logging.log4j.LogManager"),
