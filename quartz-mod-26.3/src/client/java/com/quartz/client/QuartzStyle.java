@@ -21,7 +21,11 @@ import java.util.Map;
 import java.util.Objects;
 
 public final class QuartzStyle {
-    public record Box(String bone, float x, float y, float z, float w, float h, float d, String color) {}
+    public record Box(String bone, float x, float y, float z, float w, float h, float d, String color, int[] uv) {
+        Box(String bone, float x, float y, float z, float w, float h, float d, String color) {
+            this(bone, x, y, z, w, h, d, color, null);
+        }
+    }
     public record Accessory(String id, String en, String pl, String slot, List<Box> boxes) {
         public Component label() { return QuartzText.of(en, pl); }
     }
@@ -52,6 +56,13 @@ public final class QuartzStyle {
     public static boolean equipped(Accessory item) { return item.id().equals(models.get(item.slot())); }
     public static boolean equipped(int actor, Accessory item) {
         return local(actor) ? equipped(item) : QuartzSocial.equipped(actor, item);
+    }
+
+    public static boolean wearingWings(int actor) {
+        for (Accessory item : accessories()) {
+            if (item.slot().equals("back") && equipped(actor, item)) return true;
+        }
+        return false;
     }
 
     public static boolean hasSuit(int actor) {

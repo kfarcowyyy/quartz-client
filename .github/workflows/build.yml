@@ -1,7 +1,7 @@
 name: Build Quartz Client
 on:
   push:
-    branches: ["quartz-mod-first-build", "quartz-cosmetics"]
+    branches: ["quartz-mod-first-build", "quartz-cosmetics", "quartz-refinements"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
@@ -52,7 +52,10 @@ jobs:
           grep -E '^META-INF/jars/imageio-webp-.*\.jar$' dist/jar-entries.txt
           grep -Fx 'com/quartz/QuartzServerStyle.class' dist/jar-entries.txt
           grep -Fx 'com/quartz/client/QuartzStyleLayer.class' dist/jar-entries.txt
+          grep -Fx 'com/quartz/client/mixin/QuartzChatMixin.class' dist/jar-entries.txt
+          grep -Fx 'com/quartz/client/mixin/QuartzCapeMixin.class' dist/jar-entries.txt
           grep -Fx 'assets/quartz/style-catalog.json' dist/jar-entries.txt
+          grep -Fx 'assets/quartz/textures/wardrobe/web-suit.png' dist/jar-entries.txt
           grep -Fx 'assets/quartz/textures/wardrobe/style-material.png' dist/jar-entries.txt
           grep -Fx 'fabric.mod.json' dist/jar-entries.txt
           cp "$jar" "dist/Quartz-Client-Mod-${{ matrix.target.id }}.jar"
