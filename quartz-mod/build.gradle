@@ -5,7 +5,7 @@ plugins {
 repositories { mavenCentral() }
 
 def minecraftMinor = project.minecraft_version.tokenize(".")[1].toInteger()
-def supportsSplitEnvironment = minecraftMinor >= 18
+def supportsSplitEnvironment = minecraftMinor >= 18 && !(project.minecraft_version in ['1.18', '1.18.1'])
 
 loom {
     if (supportsSplitEnvironment) splitEnvironmentSourceSets()

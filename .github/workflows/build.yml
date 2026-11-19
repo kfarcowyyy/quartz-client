@@ -21,7 +21,7 @@ jobs:
         run: |
           python3 scripts/generate-quartz-targets.py
           matrix=$(jq -c '
-            ["1.15.2", "1.16.5", "1.17.1", "1.18.2", "1.19.4", "1.20.1", "1.19.2", "26.3"] as $first
+            ["1.16", "1.16.1", "1.16.2", "1.16.3", "1.17", "1.18", "1.18.1", "1.19", "1.19.1"] as $first
             | sort_by(.id as $id | ($first | index($id) // length))
           ' src/quartz-build-targets.json)
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"

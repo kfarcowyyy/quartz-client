@@ -29,14 +29,18 @@ request = urllib.request.Request(url, headers={"User-Agent": "Quartz-Client-buil
 with urllib.request.urlopen(request, timeout=30) as response:
     metadata = ET.fromstring(response.read())
 published = [item.text for item in metadata.findall("./versioning/versions/version") if item.text]
+# Later APIs with these family suffixes require 1.17.1 and 1.18.1 respectively.
+exact_legacy_api = {"1.17": "0.36.0+1.17", "1.18": "0.44.0+1.18"}
 targets = []
 for identifier in versions:
     parts = identifier.split(".")
     candidates = [identifier]
     if len(parts) == 3:
         candidates.append(".".join(parts[:2]))
-    api = None
-    for candidate in candidates:
+    api = exact_legacy_api.get(identifier)
+    if api is not None and api not in published:
+        raise SystemExit(f"Fabric API {api} for Minecraft {identifier} is not published")
+    for candidate in candidates if api is None else []:
         suffix = "+" + candidate
         api = next((version for version in reversed(published) if version.endswith(suffix)), None)
         if api is not None:

@@ -913,11 +913,6 @@ def prepare_115_api(root):
         file.write_text(source, encoding="utf-8")
     replace_in(graphics, [
         ("        blit(texture,", "        texture(texture,"),
-        ("RenderSystem.enableScissor(", "org.lwjgl.opengl.GL11.glScissor("),
-        ("(int) ((right - x) * scale), (int) ((bottom - y) * scale));",
-         "(int) ((right - x) * scale), (int) ((bottom - y) * scale));\n"
-         "        org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_SCISSOR_TEST);"),
-        ("RenderSystem.disableScissor();", "org.lwjgl.opengl.GL11.glDisable(org.lwjgl.opengl.GL11.GL_SCISSOR_TEST);"),
     ])
     replace_in(client / "QuartzButton.java", [
         ("super(x, y, w, h, label,", "super(x, y, w, h, label.getString(),"),
@@ -928,7 +923,6 @@ def prepare_115_api(root):
     replace_in(client / "QuartzEditBox.java", [
         ("super(font, x, y, width, height, message);", "super(font, x, y, width, height, message.getString());"),
     ])
-    replace_in(client / "QuartzMotion.java", [("previous = null;", "previous = -1;")])
     replace_in(client / "QuartzHud.java", [
         ("client.player.isDeadOrDying()", "client.player.getHealth() <= 0f"),
         ("client.player.blockPosition()", "new net.minecraft.core.BlockPos(client.player.getX(), client.player.getY(), client.player.getZ())"),
@@ -1079,14 +1073,6 @@ def prepare_115_gui(root):
          "HudRenderCallback.EVENT.register(tickCounter -> {"),
         ("new QuartzGraphics(matrices)", "new QuartzGraphics(new com.mojang.blaze3d.vertex.PoseStack())"),
     ])
-    replace_in(client / "QuartzMotion.java", [
-        ("import net.minecraft.client.CameraType;\n", ""),
-        ("CameraType previous", "int previous"),
-        ("client.options.getCameraType()", "client.options.thirdPersonView"),
-        ("client.options.setCameraType(CameraType.THIRD_PERSON_BACK)", "client.options.thirdPersonView = 1"),
-        ("client.options.setCameraType(previous)", "client.options.thirdPersonView = previous"),
-        ("CameraType.FIRST_PERSON", "0"), ("CameraType.THIRD_PERSON_BACK", "1"),
-    ])
     replace_in(client / "QuartzTitleScreen.java", [
         ("import net.minecraft.client.gui.screens.multiplayer.SafetyScreen;\n", ""),
         ("minecraft.options.skipMultiplayerWarning ? new JoinMultiplayerScreen(this) : new SafetyScreen(this)",
@@ -1186,6 +1172,79 @@ def prepare_115_gui(root):
 ''', encoding="utf-8")
 
 
+
+def prepare_legacy_camera(root):
+    client = root / "src/client/java/com/quartz/client"
+    replace_in(client / "QuartzMotion.java", [
+        ("import net.minecraft.client.CameraType;\n", ""),
+        ("CameraType previous", "int previous"),
+        ("client.options.getCameraType()", "client.options.thirdPersonView"),
+        ("client.options.setCameraType(CameraType.THIRD_PERSON_BACK)", "client.options.thirdPersonView = 1"),
+        ("client.options.setCameraType(previous)", "client.options.thirdPersonView = previous"),
+        ("CameraType.FIRST_PERSON", "0"), ("CameraType.THIRD_PERSON_BACK", "1"),
+    ])
+    replace_in(client / "QuartzMotion.java", [("previous = null;", "previous = -1;")])
+
+
+def prepare_gl_scissor(root):
+    graphics = root / "src/client/java/com/quartz/client/QuartzGraphics.java"
+    replace_in(graphics, [
+        ("RenderSystem.enableScissor(", "org.lwjgl.opengl.GL11.glScissor("),
+        ("(int) ((right - x) * scale), (int) ((bottom - y) * scale));",
+         "(int) ((right - x) * scale), (int) ((bottom - y) * scale));\n"
+         "        org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_SCISSOR_TEST);"),
+        ("RenderSystem.disableScissor();", "org.lwjgl.opengl.GL11.glDisable(org.lwjgl.opengl.GL11.GL_SCISSOR_TEST);"),
+    ])
+
+
+def prepare_early_116_text(root):
+    client = root / "src/client/java/com/quartz/client"
+    graphics = client / "QuartzGraphics.java"
+    source = graphics.read_text(encoding="utf-8")
+    source = source.replace("import net.minecraft.util.FormattedCharSequence;\n", "")
+    start = source.index("    void drawString(Font font, Component text")
+    end = source.index("    void drawCenteredString(Font font, Component text", start)
+    source = source[:start] + '''    void drawString(Font font, Component text, int x, int y, int color, boolean shadow) {
+        drawString(font, text.getString(), x, y, color, shadow);
+    }
+
+''' + source[end:]
+    source = source.rstrip()
+    graphics.write_text(source[:-1] + '''
+    static String trim(Font font, String text, int width) {
+        int end = 0;
+        while (end < text.length()) {
+            int next = end + Character.charCount(text.codePointAt(end));
+            if (font.width(text.substring(0, next)) > width) break;
+            end = next;
+        }
+        return text.substring(0, end);
+    }
+
+    static java.util.List<String> wrap(Font font, Component component, int width) {
+        var lines = new java.util.ArrayList<String>();
+        String rest = component.getString();
+        while (!rest.isEmpty()) {
+            var line = trim(font, rest, width);
+            if (line.isEmpty()) line = rest.substring(0, Character.charCount(rest.codePointAt(0)));
+            if (line.length() < rest.length() && line.lastIndexOf(' ') > 0) {
+                line = line.substring(0, line.lastIndexOf(' '));
+            }
+            lines.add(line);
+            rest = rest.substring(line.length()).stripLeading();
+        }
+        return lines;
+    }
+}
+''', encoding="utf-8")
+    replace_in(client / "QuartzPackDetailsScreen.java", [
+        ("import net.minecraft.util.FormattedCharSequence;\n", ""),
+        ("FormattedCharSequence", "String"),
+        ("font.split(", "QuartzGraphics.wrap(font, "),
+    ])
+
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("version")
 parser.add_argument("project", type=Path)
@@ -1250,12 +1309,18 @@ if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.1
         prepare_pre_1191_chat(args.project)
     if args.version.split(".")[1] in {"15", "16", "17", "18"} or args.version in {"1.19", "1.19.1", "1.19.2"}:
         prepare_pose_stack_chat_with_tick(args.project)
-    if args.version.split(".")[1] in {"15", "16", "17", "18"}:
+    if args.version.split(".")[1] in {"15", "16", "17", "18"} or args.version in {"1.19", "1.19.1"}:
         replace_in(args.project / "src/main/resources/fabric.mod.json", [
             ('"fabric-api": "*"', '"fabric-networking-api-v1": "*"'),
         ])
     if args.version.split(".")[1] in {"15", "16"}:
         prepare_116_rendering(args.project)
+    if args.version.startswith("1.15") or args.version in {"1.16", "1.16.1"}:
+        prepare_legacy_camera(args.project)
+    if args.version.startswith("1.15") or args.version in {"1.16", "1.16.1", "1.16.2", "1.16.3"}:
+        prepare_gl_scissor(args.project)
+    if args.version in {"1.16", "1.16.1"}:
+        prepare_early_116_text(args.project)
     if args.version.startswith("1.15"):
         prepare_115_gui(args.project)
         prepare_115_file_drop(args.project)
