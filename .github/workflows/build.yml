@@ -28,3 +28,61 @@ jobs:
         run: python3 scripts/prepare-quartz-port.py ${{ matrix.target.id }} ${{ matrix.target.project }}
       - name: Compile Quartz mod
         run: gradle -p ${{ matrix.target.project }} -Pminecraft_version=${{ matrix.target.id }} -Pfabric_api_version=${{ matrix.target.api }} build
+      - name: Stage the runtime mod JAR
+        shell: bash
+        run: |
+          mkdir -p dist
+          jar=$(find "${{ matrix.target.project }}/build/libs" -maxdepth 1 -type f -name '*.jar' ! -name '*-sources.jar' ! -name '*-dev.jar' | head -n 1)
+          test -n "$jar"
+          jar tf "$jar" > dist/jar-entries.txt
+          grep -Fx 'com/quartz/client/QuartzModClient.class' dist/jar-entries.txt
+          grep -Fx 'com/quartz/client/QuartzTitleScreen.class' dist/jar-entries.txt
+          grep -Fx 'com/quartz/client/QuartzWardrobeScreen.class' dist/jar-entries.txt
+          grep -Fx 'com/quartz/client/QuartzModListScreen.class' dist/jar-entries.txt
+          grep -Fx 'com/quartz/client/QuartzHudEditorScreen.class' dist/jar-entries.txt
+          grep -Fx 'com/quartz/client/QuartzSettingsScreen.class' dist/jar-entries.txt
+          grep -Fx 'com/quartz/client/QuartzSafeScreen.class' dist/jar-entries.txt
+          grep -Fx 'com/quartz/client/QuartzHud.class' dist/jar-entries.txt
+          grep -Fx 'com/quartz/client/QuartzHudModule.class' dist/jar-entries.txt
+          grep -Fx 'com/quartz/client/QuartzHudSettingsScreen.class' dist/jar-entries.txt
+          grep -Fx 'com/quartz/client/QuartzPackDetailsScreen.class' dist/jar-entries.txt
+          grep -Fx 'com/quartz/client/QuartzPackVersionScreen.class' dist/jar-entries.txt
+          grep -Fx 'com/quartz/client/QuartzPackDownloads.class' dist/jar-entries.txt
+          grep -Fx 'assets/quartz/textures/wardrobe/quartz-crystal.png' dist/jar-entries.txt
+          grep -Fx 'assets/quartz/textures/gui/app-crystal.png' dist/jar-entries.txt
+          grep -E '^META-INF/jars/imageio-webp-.*\.jar$' dist/jar-entries.txt
+          grep -Fx 'com/quartz/QuartzServerStyle.class' dist/jar-entries.txt
+          grep -Fx 'com/quartz/client/QuartzStyleLayer.class' dist/jar-entries.txt
+          grep -Fx 'com/quartz/client/mixin/QuartzChatMixin.class' dist/jar-entries.txt
+          grep -Fx 'com/quartz/client/mixin/QuartzCapeMixin.class' dist/jar-entries.txt
+          grep -Fx 'assets/quartz/style-catalog.json' dist/jar-entries.txt
+          grep -Fx 'assets/quartz/textures/wardrobe/web-suit.png' dist/jar-entries.txt
+          grep -Fx 'assets/quartz/textures/wardrobe/style-material.png' dist/jar-entries.txt
+          grep -Fx 'fabric.mod.json' dist/jar-entries.txt
+          cp "$jar" "dist/Quartz-Client-Mod-${{ matrix.target.id }}.jar"
+          ls -lh dist
+      - name: Launch Minecraft to its main menu
+        shell: bash
+        run: |
+          log="$RUNNER_TEMP/quartz-launch.log"
+          setsid xvfb-run -a gradle -p ${{ matrix.target.project }} -Pminecraft_version=${{ matrix.target.id }} -Pfabric_api_version=${{ matrix.target.api }} runClient > "$log" 2>&1 &
+          game=$!
+          trap 'kill -TERM -- "-$game" 2>/dev/null || true' EXIT
+          for i in {1..76}; do
+            if grep -q 'Created: .*minecraft:textures/atlas/gui.png-atlas' "$log"; then
+              sleep 5
+              if kill -0 "$game" 2>/dev/null && ! grep -qiE 'Game crashed|MixinApplyError|Critical injection failure' "$log"; then
+                echo "Minecraft ${{ matrix.target.id }} reached the main menu"
+                exit 0
+              fi
+            fi
+            kill -0 "$game" 2>/dev/null || break
+            sleep 3
+          done
+          tail -245 "$log"
+          exit 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quartz-client-mod-${{ matrix.target.id }}
+          path: dist/*.jar
+          if-no-files-found: error
