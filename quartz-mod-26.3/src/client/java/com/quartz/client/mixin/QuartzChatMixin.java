@@ -3,7 +3,7 @@ package com.quartz.client.mixin;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.quartz.client.QuartzConfig;
-import net.minecraft.client.GuiMessage;
+import net.minecraft.client.multiplayer.chat.GuiMessage;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.ChatComponent;
@@ -62,7 +62,7 @@ abstract class QuartzChatMixin {
     }
 
     @ModifyArgs(method = "forEachLine", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/client/gui/components/ChatComponent$LineConsumer;accept(Lnet/minecraft/client/GuiMessage$Line;IF)V"))
+            target = "Lnet/minecraft/client/gui/components/ChatComponent$LineConsumer;accept(Lnet/minecraft/client/multiplayer/chat/GuiMessage$Line;IF)V"))
     private void quartz$fadeNewMessages(Args args) {
         if (quartz$frameTime == 0L) return;
         GuiMessage.Line line = args.get(0);

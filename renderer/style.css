@@ -256,6 +256,7 @@ pre#log {
   margin: auto;
   width: min(420px, calc(100vw - 40px));
   max-width: none;
+  border: 1px solid #e1d2eb;
   color: var(--text);
 }
 .removal-dialog::backdrop {

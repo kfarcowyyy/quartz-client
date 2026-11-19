@@ -16,6 +16,20 @@ async function boot(profile) {
     const window = await app.firstWindow();
     window.on('pageerror', error => console.error(error));
     await window.locator('#view button').first().waitFor({ timeout: 15000 });
+    await window.evaluate(() => {
+      globalThis.removalResult = confirmRemoval('Usunąć plik?', '<Quartz test>', 'Plik zostanie usunięty z instancji.');
+    });
+    const removal = window.locator('dialog.removal-dialog');
+    await removal.waitFor({ state: 'visible' });
+    assert.equal(await removal.locator('.removal-name').textContent(), '<Quartz test>');
+    assert.equal(await removal.locator(':focus').getAttribute('value'), 'cancel');
+    await window.keyboard.press('Escape');
+    assert.equal(await window.evaluate(() => globalThis.removalResult), false);
+    await window.evaluate(() => {
+      globalThis.removalResult = confirmRemoval('Usunąć skina?', 'Example skin', 'Skin zostanie usunięty z garderoby.');
+    });
+    await removal.locator('button[value="remove"]').click();
+    assert.equal(await window.evaluate(() => globalThis.removalResult), true);
     await window.locator('#nav [data-page="browse"]').click();
     await window.locator('[data-type="modpack"]').click();
     await window.waitForFunction(() => document.querySelector('#b-version')?.options.length > 10, undefined, {
