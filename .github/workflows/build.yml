@@ -90,6 +90,10 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
       - name: Verify packaged startup files and bundled Fabric mods
         run: node scripts/verify-windows-package.cjs
+      - name: Open the Windows launcher twice and check the Minecraft version picker
+        run: |
+          npm install --no-save --package-lock=false --no-audit --no-fund playwright-core@1.58.2
+          node scripts/smoke-windows-launcher.cjs
       - uses: actions/upload-artifact@v4
         with:
           name: Quartz-Client-Windows

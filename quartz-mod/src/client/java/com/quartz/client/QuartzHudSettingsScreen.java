@@ -62,6 +62,18 @@ final class QuartzHudSettingsScreen extends QuartzSafeScreen {
             setting.shadow = !setting.shadow;
             rebuildWidgets();
         });
+        if (module == QuartzHudModule.ARMOR) {
+            option(setting.armorHorizontal ? QuartzText.of("Horizontal", "Poziomo") : QuartzText.of("Vertical", "Pionowo"),
+                    left, top + 139 - scroll, half, true, () -> {
+                setting.armorHorizontal = !setting.armorHorizontal;
+                rebuildWidgets();
+            });
+            option(Component.literal(setting.armorSmooth ? "Smooth" : "Vanilla"),
+                    left + half + 6, top + 139 - scroll, half, true, () -> {
+                setting.armorSmooth = !setting.armorSmooth;
+                rebuildWidgets();
+            });
+        }
         field(left, top + 93 - scroll, half, QuartzText.of("Background color", "Kolor tła"), hex(setting.bg), 9,
                 value -> setColor(value, color -> setting.bg = color));
         field(left + half + 6, top + 93 - scroll, half, QuartzText.of("Text color", "Kolor tekstu"), hex(setting.fg), 9,
@@ -76,7 +88,8 @@ final class QuartzHudSettingsScreen extends QuartzSafeScreen {
                 case INVENTORY -> QuartzText.of("Stack count", "Liczba sztuk");
                 default -> QuartzText.of("Timer", "Czas");
             };
-            option(Component.empty().append(value).append(setting.showValue ? " ✓" : " ×"), left, y, controls, setting.showValue, () -> {
+            option(Component.empty().append(value).append(setting.showValue ? " ✓" : " ×"), left,
+                    module == QuartzHudModule.ARMOR ? top + 185 - scroll : y, controls, setting.showValue, () -> {
                 setting.showValue = !setting.showValue;
                 rebuildWidgets();
             });
@@ -152,8 +165,7 @@ final class QuartzHudSettingsScreen extends QuartzSafeScreen {
         var panel = QuartzHud.panel(module, minecraft, true, preview - 8, Math.max(27, h - 23));
         g.enableScissor(x + 2, y + 22, x + preview - 2, y + h - 2);
         try {
-            QuartzHud.draw(g, minecraft, module, panel, x + (preview - panel.width()) / 2,
-                    y + 22 + Math.max(0, (h - 22 - panel.height()) / 2));
+            QuartzHud.preview(g, minecraft, module, panel, x + 4, y + 22, preview - 8, h - 25);
         } finally {
             g.disableScissor();
         }

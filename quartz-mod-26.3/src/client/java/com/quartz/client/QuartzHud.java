@@ -19,7 +19,15 @@ final class QuartzHud {
     private static final List<ItemStack> EXAMPLE_ARMOR = List.of(
             new ItemStack(Items.DIAMOND_HELMET), new ItemStack(Items.DIAMOND_CHESTPLATE),
             new ItemStack(Items.DIAMOND_LEGGINGS), new ItemStack(Items.DIAMOND_BOOTS));
-    private static final Identifier SLOT = Identifier.withDefaultNamespace("hud/hotbar_selection");
+    private static final Identifier HOTBAR_TEXTURE = Identifier.withDefaultNamespace("textures/gui/sprites/hud/hotbar.png");
+    private static final List<Identifier> EMPTY_ARMOR = List.of(
+            Identifier.withDefaultNamespace("container/slot/helmet"),
+            Identifier.withDefaultNamespace("container/slot/chestplate"),
+            Identifier.withDefaultNamespace("container/slot/leggings"),
+            Identifier.withDefaultNamespace("container/slot/boots"));
+    private static final int ARMOR_SLOT = 20;
+    private static final int ARMOR_THICKNESS = ARMOR_SLOT + 2;
+    private static final int ARMOR_LENGTH = SLOTS.length * ARMOR_SLOT + 2;
     private static final int CELL_WIDTH = 34;
     private static final java.time.format.DateTimeFormatter CLOCK = java.time.format.DateTimeFormatter.ofPattern("HH:mm");
     private static final com.sun.management.OperatingSystemMXBean OS =
@@ -117,11 +125,13 @@ final class QuartzHud {
         if (module == QuartzHudModule.ARMOR) {
             for (int i = 0; i < SLOTS.length; i++) {
                 ItemStack item = preview ? EXAMPLE_ARMOR.get(i) : client.player.getItemBySlot(SLOTS[i]);
-                if (item.isEmpty()) continue;
                 int max = item.getMaxDamage();
                 String value = max > 0 ? Math.max(0, 100 - (int) (100L * item.getDamageValue() / max)) + "%" : "";
-                cells.add(new Cell(value, item, null));
+                cells.add(new Cell(value, item, item.isEmpty() ? EMPTY_ARMOR.get(i) : null));
             }
+            int armorWidth = settings.armorHorizontal ? ARMOR_LENGTH : ARMOR_THICKNESS;
+            int armorHeight = settings.armorHorizontal ? ARMOR_THICKNESS : ARMOR_LENGTH;
+            return new Panel("", cells, armorWidth, armorHeight);
         } else if (preview) {
             cells.add(new Cell("1:24", ItemStack.EMPTY, Identifier.withDefaultNamespace("mob_effect/speed")));
             cells.add(new Cell("0:48", ItemStack.EMPTY, Identifier.withDefaultNamespace("mob_effect/regeneration")));
@@ -291,19 +301,76 @@ final class QuartzHud {
 
     private static int clamp(int n, int max) { return Math.max(0, Math.min(max, n)); }
 
+    static void preview(GuiGraphicsExtractor g, Minecraft client, QuartzHudModule module, Panel panel,
+                        int x, int y, int width, int height) {
+        if (panel.width() <= 0 || panel.height() <= 0 || width <= 0 || height <= 0) return;
+        float scale = Math.min(1, Math.min((float) width / panel.width(), (float) height / panel.height()));
+        var pose = g.pose();
+        pose.pushMatrix();
+        try {
+            pose.translate(x + (width - panel.width() * scale) / 2, y + (height - panel.height() * scale) / 2);
+            pose.scale(scale, scale);
+            draw(g, client, module, panel, 0, 0);
+        } finally {
+            pose.popMatrix();
+        }
+    }
+
+    private static void armor(GuiGraphicsExtractor g, Minecraft client, Panel panel, int x, int y, QuartzConfig.Hud settings) {
+        if (settings.background) {
+            if (settings.armorSmooth) QuartzTheme.hudBackground(g, x, y, panel.width(), panel.height(), settings.bg);
+            else armorHotbar(g, x, y, settings.armorHorizontal);
+        }
+        for (int i = 0; i < panel.cells().size(); i++) {
+            Cell cell = panel.cells().get(i);
+            int left = x + 3 + (settings.armorHorizontal ? i * ARMOR_SLOT : 0);
+            int top = y + 3 + (settings.armorHorizontal ? 0 : i * ARMOR_SLOT);
+            if (cell.icon() != null) g.blitSprite(RenderPipelines.GUI_TEXTURED, cell.icon(), left, top, 16, 16);
+            else g.item(cell.item(), left, top);
+            if (settings.showValue && !cell.value().isEmpty()) {
+                var pose = g.pose();
+                pose.pushMatrix();
+                try {
+                    pose.translate(left + 16 - client.font.width(cell.value()) * 0.67f, top + 12).scale(0.67f, 0.67f);
+                    g.text(client.font, cell.value(), 0, 0, settings.fg, settings.shadow);
+                } finally {
+                    pose.popMatrix();
+                }
+            }
+        }
+    }
+
+    private static void armorHotbar(GuiGraphicsExtractor g, int x, int y, boolean horizontal) {
+        var pose = g.pose();
+        pose.pushMatrix();
+        try {
+            pose.translate(horizontal ? x : x + ARMOR_THICKNESS, y);
+            if (!horizontal) pose.rotate((float) (Math.PI / 2));
+            // Preserve the original slot spacing. The last column closes the shortened bar.
+            int interior = ARMOR_LENGTH - 1;
+            g.blit(RenderPipelines.GUI_TEXTURED, HOTBAR_TEXTURE, 0, 0, 0, 0,
+                    interior, ARMOR_THICKNESS, interior, ARMOR_THICKNESS, 182, 22);
+            g.blit(RenderPipelines.GUI_TEXTURED, HOTBAR_TEXTURE, interior, 0, 181, 0,
+                    1, ARMOR_THICKNESS, 1, ARMOR_THICKNESS, 182, 22);
+        } finally {
+            pose.popMatrix();
+        }
+    }
+
     static void draw(GuiGraphicsExtractor g, Minecraft client, QuartzHudModule module, Panel panel, int x, int y) {
         if (panel.width() == 0) return;
         var settings = module.settings();
         var font = client.font;
+        if (module == QuartzHudModule.ARMOR) {
+            armor(g, client, panel, x, y, settings);
+            return;
+        }
+        if (settings.background) QuartzTheme.hudBackground(g, x, y, panel.width(), panel.height(), settings.bg);
         if (module == QuartzHudModule.INVENTORY) {
             int columns = Math.max(1, panel.width() / 20);
             for (int i = 0; i < panel.cells().size(); i++) {
                 Cell cell = panel.cells().get(i);
                 int left = x + i % columns * 20, top = y + i / columns * 20;
-                if (settings.background) {
-                    g.fill(left + 1, top + 1, left + 19, top + 19, settings.bg);
-                    g.blitSprite(RenderPipelines.GUI_TEXTURED, SLOT, left, top, 20, 20);
-                }
                 if (!cell.item().isEmpty()) g.item(cell.item(), left + 2, top + 2);
                 if (settings.showValue && !cell.value().isEmpty())
                     g.text(font, cell.value(), left + 18 - font.width(cell.value()), top + 11, settings.fg, settings.shadow);
@@ -311,7 +378,6 @@ final class QuartzHud {
             return;
         }
         if (module == QuartzHudModule.ARMOR_BAR) {
-            if (settings.background) g.fill(x, y, x + panel.width(), y + panel.height(), settings.bg);
             int armor = Integer.parseInt(panel.text());
             for (int i = 0; i < 10; i++) {
                 String sprite = armor >= (i + 1) * 2 ? "full" : armor == i * 2 + 1 ? "half" : "empty";
@@ -320,7 +386,6 @@ final class QuartzHud {
             return;
         }
         if (!module.icons()) {
-            if (settings.background) QuartzTheme.rounded(g, x, y, panel.width(), panel.height(), settings.bg);
             g.text(font, panel.text(), x + 6, y + 5, settings.fg, settings.shadow);
             return;
         }
@@ -329,10 +394,6 @@ final class QuartzHud {
         for (int i = 0; i < panel.cells().size(); i++) {
             Cell cell = panel.cells().get(i);
             int left = x + i % columns * CELL_WIDTH, top = y + i / columns * line;
-            if (settings.background) {
-                g.fill(left + 7, top + 3, left + 27, top + 23, settings.bg);
-                g.blitSprite(RenderPipelines.GUI_TEXTURED, SLOT, left + 5, top + 1, 24, 24);
-            }
             if (!cell.item().isEmpty()) g.item(cell.item(), left + 9, top + 5);
             if (cell.icon() != null) g.blitSprite(RenderPipelines.GUI_TEXTURED, cell.icon(), left + 9, top + 5, 16, 16);
             if (settings.showValue) {

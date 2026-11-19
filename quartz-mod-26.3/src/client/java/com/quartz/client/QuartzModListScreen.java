@@ -210,8 +210,7 @@ public class QuartzModListScreen extends QuartzSafeScreen {
                 var sample = QuartzHud.panel(mod.module(), minecraft, true, area, 27);
                 g.enableScissor(x + 5, y + 20, x + cardWidth - 5, y + 47);
                 try {
-                    QuartzHud.draw(g, minecraft, mod.module(), sample, x + (cardWidth - sample.width()) / 2,
-                            y + 21 + Math.max(0, (26 - sample.height()) / 2));
+                    QuartzHud.preview(g, minecraft, mod.module(), sample, x + 5, y + 21, cardWidth - 10, 25);
                 } finally {
                     g.disableScissor();
                 }

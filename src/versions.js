@@ -1,24 +1,94 @@
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const { randomUUID } = require('node:crypto');
+const paths = require('./paths');
+const bundled = require('./minecraft-version-index.json').map(([id, type, date]) => ({ id, type, date }));
 const { getJson } = require('./net');
 
-const MANIFEST = 'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json';
-let cache = null;
+const HOSTS = ['piston-meta.mojang.com', 'launchermeta.mojang.com'];
+const REFRESH_AFTER = 6 * 60 * 60 * 1000;
+const cacheFile = () => path.join(paths.base(), 'minecraft-versions.json');
+let initial;
+let current;
+let pending;
 
-async function manifest() {
-  if (!cache) cache = await getJson(MANIFEST);
-  return cache;
+function fromManifest(manifest) {
+  if (!Array.isArray(manifest?.versions)) throw new Error('Invalid Minecraft version manifest');
+  const versions = manifest.versions.map(({ id, type, releaseTime, url }) => ({ id, type, date: releaseTime, url }));
+  if (!valid(versions)) throw new Error('Incomplete Minecraft version manifest');
+  return versions;
 }
 
-async function list() {
-  const m = await manifest();
-  return m.versions.map((v) => ({ id: v.id, type: v.type, date: v.releaseTime }));
+function valid(versions) {
+  return Array.isArray(versions) && versions.some(v => v?.type === 'release') && versions.every(v => {
+    if (typeof v?.id !== 'string' || typeof v.type !== 'string' || typeof v.date !== 'string') return false;
+    try {
+      const url = new URL(v.url);
+      return url.protocol === 'https:' && HOSTS.includes(url.hostname) && !url.port &&
+        !url.username && !url.password;
+    } catch { return false; }
+  });
+}
+
+function snapshot() {
+  if (current) return Promise.resolve(current);
+  initial ??= (async () => {
+    try {
+      const saved = JSON.parse(await fs.readFile(cacheFile(), 'utf8'));
+      if (valid(saved.versions) && Number.isFinite(saved.checkedAt)) current = saved;
+    } catch { /* A fresh installation can use the bundled index. */ }
+    return current;
+  })();
+  return initial;
+}
+
+async function fetchManifest() {
+  return Promise.any(HOSTS.map(host =>
+    getJson('https://' + host + '/mc/game/version_manifest_v2.json', {}, AbortSignal.timeout(5500)).then(fromManifest)
+  ));
+}
+
+async function update(force) {
+  const cached = await snapshot();
+  if (!force && cached && Date.now() - cached.checkedAt < REFRESH_AFTER) return cached;
+  pending ??= (async () => {
+    const versions = await fetchManifest();
+    const checkedAt = Date.now();
+    current = { versions, checkedAt };
+    const file = cacheFile(), temporary = file + '.' + randomUUID() + '.tmp';
+    try {
+      await fs.mkdir(path.dirname(file), { recursive: true });
+      await fs.writeFile(temporary, JSON.stringify(current));
+      await fs.rename(temporary, file);
+    } catch {
+      await fs.rm(temporary, { force: true }).catch(() => {});
+    }
+    return current;
+  })().finally(() => { pending = null; });
+  return pending;
+}
+
+async function list(opts = {}) {
+  let cached = await snapshot();
+  let refreshFailed = false;
+  if (opts?.refresh === true) {
+    try { cached = await update(opts.force === true); }
+    catch { refreshFailed = true; }
+  }
+  const items = (cached?.versions ?? bundled).map(({ id, type, date }) => ({ id, type, date }));
+  return { items, source: cached ? 'cache' : 'bundled', refreshFailed };
 }
 
 async function javaMajor(id) {
-  const m = await manifest();
-  const v = m.versions.find((x) => x.id === id);
-  if (!v) return 21;
-  const j = await getJson(v.url);
-  return (j.javaVersion && j.javaVersion.majorVersion) || 8;
+  const cached = await snapshot();
+  let v = cached?.versions.find(x => x.id === id);
+  if (!v) {
+    const updated = await update(true);
+    v = updated.versions.find(x => x.id === id);
+  }
+  if (!v) throw new Error('Brak metadanych wersji Minecrafta: ' + id);
+  const detail = await getJson(v.url, {}, AbortSignal.timeout(10000));
+  return (detail.javaVersion && detail.javaVersion.majorVersion) || 8;
 }
 
 module.exports = { list, javaMajor };

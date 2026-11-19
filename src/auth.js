@@ -1,5 +1,4 @@
 const crypto = require('crypto');
-const { Auth } = require('msmc');
 const store = require('./store');
 
 function offlineUuid(name) {
@@ -16,6 +15,7 @@ const pub = () => {
 };
 
 async function microsoft() {
+  const { Auth } = require('msmc');
   const manager = new Auth('select_account');
   const xbox = await manager.launch('electron');
   const mc = await xbox.getMinecraft();
@@ -54,6 +54,7 @@ async function authorization() {
     };
   }
 
+  const { Auth } = require('msmc');
   const manager = new Auth('select_account');
   const xbox = await manager.refresh(a.saved);
   const mc = await xbox.getMinecraft();
