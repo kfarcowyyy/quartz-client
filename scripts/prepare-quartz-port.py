@@ -755,6 +755,19 @@ def prepare_pre_1194_gui(root):
     replace_in(client / "QuartzHud.java", [
         ("effect.isInfiniteDuration()", "effect.getDuration() < 0"),
     ])
+    replace_in(client / "QuartzButton.java", [("isHovered()", "isHovered")])
+    replace_in(client / "QuartzPacksScreen.java", [
+        ("minecraft.options.updateResourcePacks(repository);",
+         """minecraft.options.resourcePacks.clear();
+            minecraft.options.incompatibleResourcePacks.clear();
+            for (var pack : repository.getSelectedPacks()) {
+                if (pack.isRequired()) continue;
+                minecraft.options.resourcePacks.add(pack.getId());
+                if (!pack.getCompatibility().isCompatible()) minecraft.options.incompatibleResourcePacks.add(pack.getId());
+            }
+            minecraft.options.save();
+            minecraft.reloadResourcePacks();"""),
+    ])
 
 
 def prepare_pre_1193_names(root):
@@ -766,6 +779,18 @@ def prepare_pre_1193_names(root):
             ("sprite.atlasLocation()", "net.minecraft.world.inventory.InventoryMenu.BLOCK_ATLAS"),
             ("Axis.YP.", "Vector3f.YP."), ("Axis.ZP.", "Vector3f.ZP."),
         ])
+
+    replace_in(root / "src/client/java/com/quartz/client/QuartzMotion.java", [
+        ("var hand = new org.joml.Vector3f(0, 10, 0)\n"
+         "                        .rotateX(p.rightArm.xRot).rotateY(p.rightArm.yRot).rotateZ(p.rightArm.zRot);",
+         "var hand = new com.mojang.math.Vector3f(0, 10, 0);\n"
+         "                hand.transform(com.mojang.math.Vector3f.XP.rotation(p.rightArm.xRot));\n"
+         "                hand.transform(com.mojang.math.Vector3f.YP.rotation(p.rightArm.yRot));\n"
+         "                hand.transform(com.mojang.math.Vector3f.ZP.rotation(p.rightArm.zRot));"),
+        ("+ hand.x,", "+ hand.x(),"),
+        ("+ hand.y,", "+ hand.y(),"),
+        ("+ hand.z,", "+ hand.z(),"),
+    ])
 
 
 def prepare_legacy_fps(root):
@@ -804,6 +829,10 @@ def prepare_pre_119_text_and_chat(root):
             ("Component.translatable(", "new net.minecraft.network.chat.TranslatableComponent("),
             ("Component.empty()", 'new net.minecraft.network.chat.TextComponent("")'),
         ])
+
+
+def prepare_pre_1191_chat(root):
+    client = root / "src/client/java/com/quartz/client"
     replace_in(client / "mixin/QuartzChatMixin.java", [
         ("Lnet/minecraft/network/chat/MessageSignature;ILnet/minecraft/client/GuiMessageTag;Z", "IIZ"),
         ("net.minecraft.network.chat.MessageSignature signature, int tick, net.minecraft.client.GuiMessageTag tag,",
@@ -854,12 +883,69 @@ def prepare_legacy_json(root):
         replace_in(client / filename, substitutions)
 
 
+def prepare_legacy_widget_rebuild(root):
+    client = root / "src/client/java/com/quartz/client"
+    screen = client / "QuartzSafeScreen.java"
+    source = screen.read_text(encoding="utf-8").rstrip()
+    screen.write_text(source[:-1] + '''    protected final void rebuildWidgets() {
+        init(minecraft, width, height);
+    }
+}
+''', encoding="utf-8")
+
+
+def prepare_115_api(root):
+    client = root / "src/client/java/com/quartz/client"
+    graphics = client / "QuartzGraphics.java"
+    names = [("fill", "quad"), ("fillGradient", "gradient"),
+             ("drawCenteredString", "centered"), ("blit", "texture")]
+    for file in client.glob("*.java"):
+        source = file.read_text(encoding="utf-8")
+        for old, new in names:
+            source = re.sub(rf"\b(g|graphics)\.{old}\(", rf"\1.{new}(", source)
+            if file == graphics:
+                source = source.replace(f"void {old}(", f"void {new}(")
+        file.write_text(source, encoding="utf-8")
+    replace_in(graphics, [
+        ("        blit(texture,", "        texture(texture,"),
+        ("RenderSystem.enableScissor(", "org.lwjgl.opengl.GL11.glScissor("),
+        ("(int) ((right - x) * scale), (int) ((bottom - y) * scale));",
+         "(int) ((right - x) * scale), (int) ((bottom - y) * scale));\n"
+         "        org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_SCISSOR_TEST);"),
+        ("RenderSystem.disableScissor();", "org.lwjgl.opengl.GL11.glDisable(org.lwjgl.opengl.GL11.GL_SCISSOR_TEST);"),
+    ])
+    replace_in(client / "QuartzButton.java", [
+        ("super(x, y, w, h, label,", "super(x, y, w, h, label.getString(),"),
+        ("getMessage().getString()", "getMessage()"),
+        ('button.setMessage(QuartzText.of("See game log", "Sprawdź dziennik gry"));',
+         'button.setMessage(QuartzText.of("See game log", "Sprawdź dziennik gry").getString());'),
+    ])
+    replace_in(client / "QuartzEditBox.java", [
+        ("super(font, x, y, width, height, message);", "super(font, x, y, width, height, message.getString());"),
+    ])
+    replace_in(client / "QuartzMotion.java", [("previous = null;", "previous = -1;")])
+    replace_in(client / "QuartzHud.java", [
+        ("client.player.isDeadOrDying()", "client.player.getHealth() <= 0f"),
+        ("client.player.blockPosition()", "new net.minecraft.core.BlockPos(client.player.getX(), client.player.getY(), client.player.getZ())"),
+        ("key.getTranslatedKeyMessage().getString()", "key.getTranslatedKeyMessage()"),
+        ("getResourcePackRepository().getSelectedIds().stream()", "getResourcePackRepository().getSelected().stream().map(pack -> pack.getId())"),
+    ])
+    replace_in(client / "QuartzPacksScreen.java", [
+        ("if (!repository.getAvailableIds().contains(id)) {",
+         "var packFile = repository.getPack(id);\n            if (packFile == null) {"),
+        ("new ArrayList<>(repository.getSelectedIds())", "new ArrayList<>(repository.getSelected())"),
+        ("selected.remove(id);", "selected.remove(packFile);"),
+        ("selected.add(id);", "selected.add(packFile);"),
+        ("repository.getSelectedPacks()", "repository.getSelected()"),
+    ])
+
+
 def prepare_legacy_text_fields(root, minor):
     client = root / "src/client/java/com/quartz/client"
     for file in client.glob("*.java"):
         replace_in(file, [("new EditBox(", "new QuartzEditBox(")])
         source = file.read_text(encoding="utf-8")
-        source = re.sub(r"(?m)^\s*(?:field|input)\.setHint\(.*\);\n", "\n", source)
+        source = re.sub(r"(?m)^\s*(?:field|input|search)\.setHint\(.*\);\n", "\n", source)
         file.write_text(source, encoding="utf-8")
     signature = "int mouseX, int mouseY, float delta"
     forwarded = "mouseX, mouseY, delta"
@@ -957,9 +1043,12 @@ def prepare_116_rendering(root):
     ])
     replace_in(client / "QuartzHud.java", [
         ("client.player.getInventory()", "client.player.inventory"),
+        ("stack.is(item)", "stack.getItem() == item"),
+        ("!chest.is(Items.ELYTRA)", "chest.getItem() != Items.ELYTRA"),
         (".getEyePosition()", ".getEyePosition(1.0f)"),
     ])
 
+    replace_in(client / "QuartzModClient.java", [('KeyMapping.CATEGORY_MISC', '"key.categories.misc"')])
     for file in client.glob("*.java"):
         replace_in(file, [
             ("addRenderableWidget(", "addButton("),
@@ -1148,20 +1237,25 @@ if args.version in {"1.15", "1.15.1", "1.15.2", "1.16", "1.16.1", "1.16.2", "1.1
         prepare_pre_1193_names(args.project)
         prepare_legacy_fps(args.project)
         prepare_legacy_json(args.project)
+        prepare_legacy_text_fields(args.project, args.version.split(".")[1])
     if args.version.split(".")[1] in {"15", "16", "17", "18"}:
         prepare_pre_119_text_and_chat(args.project)
+        prepare_legacy_widget_rebuild(args.project)
+    if args.version.split(".")[1] in {"15", "16", "17", "18"} or args.version == "1.19":
+        prepare_pre_1191_chat(args.project)
     if args.version.split(".")[1] in {"15", "16"}:
         prepare_116_rendering(args.project)
     if args.version.startswith("1.15"):
         prepare_115_gui(args.project)
         prepare_115_file_drop(args.project)
-    if args.version.split(".")[1] in {"15", "16", "17", "18"}:
-        prepare_legacy_text_fields(args.project, args.version.split(".")[1])
+        prepare_115_api(args.project)
     if args.version.split(".")[1] in {"15", "16", "17"}:
         for file in (args.project / "src").rglob("*.java"):
             replace_in(file, [("org.slf4j.LoggerFactory", "org.apache.logging.log4j.LogManager"),
                               ("org.slf4j.Logger", "org.apache.logging.log4j.Logger"),
-                              ("LoggerFactory.getLogger", "LogManager.getLogger")])
+                              ("LoggerFactory.getLogger", "LogManager.getLogger"),
+                              ("JsonParser.parseString(", "new JsonParser().parse("),
+                              ("JsonParser.parseReader(", "new JsonParser().parse(")])
     if args.version == "1.20.5":
         replace_in(args.project / "src/main/java/com/quartz/QuartzServerStyle.java", [
             ("context.server()", "context.player().server"),
