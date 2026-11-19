@@ -26,9 +26,11 @@ for i in {1..75}; do
   sleep 3
 done
 test -n "$window"
-xdotool windowsize --sync "$window" 1024 768
-xdotool windowfocus --sync "$window"
+echo "Minecraft window: $window"
+xdotool windowsize "$window" 1024 768
+xdotool windowfocus "$window"
 sleep 5
+xdotool getwindowgeometry "$window"
 click() {
   xdotool mousemove --window "$window" $(($1 * 2)) $(($2 * 2)) click 1
   sleep 0.6
