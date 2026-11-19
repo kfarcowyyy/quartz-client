@@ -1,7 +1,7 @@
 name: Build Quartz Client
 on:
   push:
-    branches: ["quartz-mod-first-build", "quartz-cosmetics", "quartz-refinements"]
+    branches: ["quartz-mod-first-build", "quartz-cosmetics", "quartz-refinements", "quartz-version-picker", "quartz-version-ports"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:

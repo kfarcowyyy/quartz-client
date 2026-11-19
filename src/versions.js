@@ -68,6 +68,27 @@ async function update(force) {
   return pending;
 }
 
+function allowedFamily(id) {
+  if (typeof id !== 'string') return null;
+  const match = /^(1\.(?:1[5-9]|2[01])|26)(?:\.(\d+))?(?:\.(\d+))?$/.exec(id);
+  if (!match || (match[1] === '26' && !match[2]) || (match[1] !== '26' && match[3])) return null;
+  return match[1];
+}
+
+function isCreatable(version) {
+  return version.type === 'release' && allowedFamily(version.id) !== null;
+}
+
+async function assertCreatable(id) {
+  if (!allowedFamily(id)) throw new Error('Wybierz opublikowaną wersję Minecrafta od 1.15 do 1.21.x lub 26.x.');
+  const includes = (items) => items.some(item => item.id === id && isCreatable(item));
+  if (includes(bundled) || includes((await snapshot())?.versions ?? [])) return;
+  const latest = await update(false).catch(() => null);
+  if (!latest || !includes(latest.versions)) {
+    throw new Error('Wybierz opublikowaną wersję Minecrafta od 1.15 do 1.21.x lub 26.x.');
+  }
+}
+
 async function list(opts = {}) {
   let cached = await snapshot();
   let refreshFailed = false;
@@ -75,7 +96,9 @@ async function list(opts = {}) {
     try { cached = await update(opts.force === true); }
     catch { refreshFailed = true; }
   }
-  const items = (cached?.versions ?? bundled).map(({ id, type, date }) => ({ id, type, date }));
+  const source = cached?.versions ?? bundled;
+  const items = (opts.creationOnly ? source.filter(isCreatable) : source)
+    .map(({ id, type, date }) => ({ id, type, date, family: allowedFamily(id) }));
   return { items, source: cached ? 'cache' : 'bundled', refreshFailed };
 }
 
@@ -91,4 +114,4 @@ async function javaMajor(id) {
   return (detail.javaVersion && detail.javaVersion.majorVersion) || 8;
 }
 
-module.exports = { list, javaMajor };
+module.exports = { list, javaMajor, assertCreatable };

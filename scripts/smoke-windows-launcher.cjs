@@ -43,7 +43,46 @@ async function boot(profile) {
       const select = document.querySelector('#n-ver');
       return select?.options.length > 10 && !select.disabled && Boolean(select.value);
     }, undefined, { timeout: 15000 });
+    const listed = await window.locator('#n-ver option').evaluateAll(options => options.map(option => option.value));
+    for (const release of ['1.15', '1.15.1', '1.16.5', '1.17.1', '1.18.2', '1.19.4', '1.20.6', '1.21.11', '26.3']) {
+      assert.ok(listed.includes(release), 'Missing release ' + release);
+    }
+    assert.ok(listed.every(value => /^(?:1\.(?:1[5-9]|2[01])|26\.\d+)(?:\.\d+)?$/.test(value)));
+    assert.equal(await window.locator('#n-snap').count(), 0);
+    await window.locator('#n-ver + .quartz-picker-trigger').click();
+    await window.locator('#n-ver-choices [role=option]').filter({ hasText: /^1\.15\.1$/ }).click();
+    assert.equal(await window.locator('#n-ver').inputValue(), '1.15.1');
     const selected = await window.locator('#n-ver').inputValue();
+    await window.locator('#n-cancel').click();
+    const account = await window.evaluate(async () => {
+      state.account = await api('auth:offline', 'QuartzSmoke');
+      renderNav();
+      return state.account;
+    });
+    const skinId = '00000000000000000000000000000000-wide';
+    await app.evaluate(({ app, nativeImage }, { account, skinId }) => {
+      const fs = require('node:fs'), path = require('node:path');
+      const folder = path.join(app.getPath('userData'), 'wardrobe', account.uuid.replaceAll('-', '') + '-skins');
+      fs.mkdirSync(folder, { recursive: true });
+      const data = Buffer.alloc(64 * 64 * 4, 255);
+      for (let pos = 0; pos < data.length; pos += 4) data[pos + 1] = (pos / 16) % 255;
+      fs.writeFileSync(path.join(folder, skinId + '.png'), nativeImage.createFromBitmap(data, { width: 64, height: 64 }).toPNG());
+    }, { account, skinId });
+    await window.locator('#nav [data-page="cosmetics"]').click();
+    await window.locator('[data-wardrobe-tab="skins"]').click();
+    await window.locator('[data-wardrobe-preview]').first().click();
+    const model = window.locator('.interactive-model');
+    await model.waitFor();
+    await model.focus();
+    await model.press('ArrowRight');
+    const equip = window.locator('[data-wardrobe-action="equip"]');
+    if (await equip.isEnabled()) await equip.click();
+    await equip.waitFor();
+    await window.waitForFunction(() => document.querySelector('[data-wardrobe-action="equip"]').disabled);
+    await window.waitForFunction(() => {
+      const head = document.querySelector('#account-head');
+      return Boolean(head?.getContext('2d').getImageData(15, 22, 1, 1).data[0] > 200);
+    });
     return selected;
   } finally {
     await app.close();

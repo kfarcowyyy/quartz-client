@@ -24,6 +24,8 @@ const INVOKE = new Set([
   'cosmetics:equip-skin',
   'cosmetics:remove-skin',
   'cosmetics:capes',
+  'cosmetics:active-head',
+  'cosmetics:equip-cape',
   'browse:search',
   'browse:install',
   'game:play',

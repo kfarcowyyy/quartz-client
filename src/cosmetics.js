@@ -113,6 +113,7 @@ function cacheCapes(account, profile) {
     throw new Error('The signed in Minecraft account changed.');
   }
   const capes = (Array.isArray(profile.capes) ? profile.capes : []).map(cape => ({
+    id: typeof cape.id === 'string' && /^[a-f0-9-]{32,36}$/i.test(cape.id) ? cape.id : null,
     name: typeof cape.alias === 'string' ? cape.alias.slice(0, 80) : 'Minecraft cape',
     active: cape.state === 'ACTIVE',
     url: typeof cape.url === 'string' && /^https?:\/\/textures\.minecraft\.net\/texture\/[0-9a-f]+$/i.test(cape.url)
@@ -152,4 +153,48 @@ function setEmote(account, index, id) {
   return readStyle(account);
 }
 
-module.exports = { readStyle, equipModel, setEmote, profileFile, read, listSkins, selectSkin, addSkin, removeSkin, cachedCapes, cacheCapes };
+function activeLocalSkin(account) {
+  const id = read(account).skin;
+  if (id === noSkin) return null;
+  const file = skinPath(account, id);
+  if (fs.statSync(file).size > MAX_PNG) return null;
+  return 'data:image/png;base64,' + fs.readFileSync(file).toString('base64');
+}
+
+function cachedAccountHead(account) {
+  const value = readJson(sibling(account, '-account-head.json'), null)?.texture;
+  return typeof value === 'string' && value.startsWith('data:image/png;base64,') && value.length <= MAX_PNG * 2
+    ? value : null;
+}
+
+async function fetchAccountHead(account, profile) {
+  if (String(profile.id).replace(/-/g, '').toLowerCase() !== String(account.uuid).replace(/-/g, '').toLowerCase()) return null;
+  const skin = (Array.isArray(profile.skins) ? profile.skins : []).find(value => value.state === 'ACTIVE');
+  if (typeof skin?.url !== 'string' || !/^https?:\/\/textures\.minecraft\.net\/texture\/[a-f0-9]{32,128}$/i.test(skin.url)) return null;
+  const url = skin.url.replace(/^http:/, 'https:');
+  const previous = readJson(sibling(account, '-account-head.json'), null);
+  if (previous?.url === url && typeof previous.texture === 'string' && previous.texture.startsWith('data:image/png;base64,')) {
+    return previous.texture;
+  }
+  const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(6500) });
+  if (!response.ok || Number(response.headers.get('content-length')) > MAX_PNG) return null;
+  const reader = response.body.getReader(), chunks = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_PNG) { await reader.cancel(); return null; }
+      chunks.push(Buffer.from(value));
+    }
+  } finally { reader.releaseLock(); }
+  const bytes = Buffer.concat(chunks);
+  if (bytes.length < 24 || !bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex')) ||
+      bytes.readUInt32BE(16) !== 64 || ![32, 64].includes(bytes.readUInt32BE(20))) return null;
+  const texture = 'data:image/png;base64,' + bytes.toString('base64');
+  writeJson(sibling(account, '-account-head.json'), { url, texture });
+  return texture;
+}
+
+module.exports = { readStyle, equipModel, setEmote, profileFile, read, listSkins, selectSkin, addSkin, removeSkin, cachedCapes, cacheCapes, activeLocalSkin, cachedAccountHead, fetchAccountHead };
