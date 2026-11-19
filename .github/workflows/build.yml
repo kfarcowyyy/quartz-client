@@ -20,7 +20,11 @@ jobs:
       - id: versions
         run: |
           python3 scripts/generate-quartz-targets.py
-          echo "matrix=$(jq -c . src/quartz-build-targets.json)" >> "$GITHUB_OUTPUT"
+          matrix=$(jq -c '
+            ["1.15.2", "1.16.5", "1.17.1", "1.18.2", "1.19.4", "1.20.1", "1.19.2", "26.3"] as $first
+            | sort_by(.id as $id | ($first | index($id) // length))
+          ' src/quartz-build-targets.json)
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
   build-mod:
     needs: targets
     strategy:
@@ -38,6 +42,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.8.2"
+          cache-read-only: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
       - name: Prepare matching Java sources
         if: matrix.target.port
         run: python3 scripts/prepare-quartz-port.py ${{ matrix.target.id }} ${{ matrix.target.project }}
@@ -91,6 +96,16 @@ jobs:
           grep -Fx 'fabric.mod.json' dist/jar-entries.txt
           cp "$jar" "dist/Quartz-Client-Mod-${{ matrix.target.id }}.jar"
           ls -lh dist
+      - name: Set up software graphics for Minecraft 26.3
+        if: matrix.target.id == '26.3'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl-mesa0 mesa-vulkan-drivers
+          echo "SDL_VIDEO_FORCE_EGL=1" >> "$GITHUB_ENV"
+          echo "LIBGL_ALWAYS_SOFTWARE=1" >> "$GITHUB_ENV"
+          driver=$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' -print -quit)
+          test -n "$driver"
+          echo "VK_DRIVER_FILES=$driver" >> "$GITHUB_ENV"
       - name: Launch Minecraft to its main menu
         shell: bash
         env:
