@@ -6,7 +6,10 @@ Instnce create.
 <img width="1453" height="875" alt="Zrzut ekranu 2026-11-20 081054" src="https://github.com/user-attachments/assets/5e8f7c96-24fc-40e4-b202-83afd2c8f448" />
 Pick your favourite version fabric or vanilla!
 <img width="1452" height="873" alt="Zrzut ekranu 2026-11-20 081247" src="https://github.com/user-attachments/assets/50a8006d-78d7-4f4b-8b54-6770e6675758" />
-Install mods in launcher from modrinth or even a modpacks! You can download resource packs and shaders too!
+You can log in on premium or offline account!
+<img width="1453" height="873" alt="Zrzut ekranu 2026-11-20 081109" src="https://github.com/user-attachments/assets/214c4ffc-febb-445a-bbc1-07a6911099f7" />
+And even modpacks! Resource packs and shaders too!
+<img width="1457" height="878" alt="Zrzut ekranu 2026-11-20 081125" src="https://github.com/user-attachments/assets/9058470c-4925-4364-be39-a41f196ef3e1" />
 <img width="1457" height="877" alt="Zrzut ekranu 2026-11-20 081259" src="https://github.com/user-attachments/assets/34765ab2-6ea0-4a97-b456-b79bf9b3660a" />
 Pick allocation of memory (RAM) even your laungage polish or english!
 <img width="1452" height="876" alt="Zrzut ekranu 2026-11-20 081313" src="https://github.com/user-attachments/assets/3746490a-5c19-4308-86be-9df64e1f6682" />
