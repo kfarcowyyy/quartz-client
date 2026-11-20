@@ -33,3 +33,9 @@ Even an emotes!
 Install resource packs or shaders directly in game!
 <img width="1917" height="993" alt="Zrzut ekranu 2026-11-20 081721" src="https://github.com/user-attachments/assets/a093d213-cd8d-4e74-aa1d-2da337702b94" />
 Screenshots that you can look to in game!
+https://github.com/user-attachments/assets/604afe6e-f412-42cc-8356-367b9253a9cc
+See how emotes or cosmetics look.
+
+
+
+
