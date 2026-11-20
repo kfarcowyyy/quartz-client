@@ -343,7 +343,7 @@ final class QuartzHud {
             int left = x + 3 + (settings.armorHorizontal ? i * ARMOR_SLOT : 0);
             int top = y + 3 + (settings.armorHorizontal ? 0 : i * ARMOR_SLOT);
             drawCellItem(g, cell, left, top);
-            if (settings.showValue && !cell.value().isEmpty()) {
+            if (settings.showValue && (settings.fg >>> 24) >= 4 && !cell.value().isEmpty()) {
                 var pose = g.pose();
                 pose.pushMatrix();
                 try {
@@ -388,7 +388,7 @@ final class QuartzHud {
                 Cell cell = panel.cells().get(i);
                 int left = x + i % columns * 20, top = y + i / columns * 20;
                 drawCellItem(g, cell, left + 2, top + 2);
-                if (settings.showValue && !cell.value().isEmpty())
+                if (settings.showValue && (settings.fg >>> 24) >= 4 && !cell.value().isEmpty())
                     g.text(font, cell.value(), left + 18 - font.width(cell.value()), top + 11, settings.fg, settings.shadow);
             }
             return;
@@ -402,7 +402,8 @@ final class QuartzHud {
             return;
         }
         if (!module.icons()) {
-            g.text(font, panel.text(), x + 6, y + 5, settings.fg, settings.shadow);
+            if ((settings.fg >>> 24) >= 4)
+                g.text(font, panel.text(), x + 6, y + 5, settings.fg, settings.shadow);
             return;
         }
         int columns = Math.max(1, panel.width() / CELL_WIDTH);
@@ -411,7 +412,7 @@ final class QuartzHud {
             Cell cell = panel.cells().get(i);
             int left = x + i % columns * CELL_WIDTH, top = y + i / columns * line;
             drawCellItem(g, cell, left + 9, top + 5);
-            if (settings.showValue) {
+            if (settings.showValue && (settings.fg >>> 24) >= 4) {
                 String value = font.plainSubstrByWidth(cell.value(), CELL_WIDTH - 2);
                 g.text(font, value, left + (CELL_WIDTH - font.width(value)) / 2, top + 26, settings.fg, settings.shadow);
             }

@@ -88,4 +88,29 @@ async function minecraftProfile() {
   return (await minecraftSession(account)).profile;
 }
 
-module.exports = { microsoft, offline, logout, authorization, minecraftProfile, status: pub };
+async function equipCape(id) {
+  const account = store.get().account;
+  if (account?.type !== 'microsoft') throw new Error('Sign in to Microsoft to equip a cape.');
+  const session = await minecraftSession(account);
+  if (!Array.isArray(session.profile.capes) || !session.profile.capes.some(cape => cape.id === id)) {
+    throw new Error('This cape is not on the signed-in Minecraft account.');
+  }
+  const token = session.mclc().access_token;
+  if (typeof token !== 'string' || !token) throw new Error('Sign in to Microsoft again.');
+  const response = await fetch('https://api.minecraftservices.com/minecraft/profile/capes/active', {
+    method: 'PUT',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ capeId: id }),
+    redirect: 'error',
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!response.ok) throw new Error('Minecraft could not equip the cape (HTTP ' + response.status + ').');
+  const updated = await response.json();
+  if (updated?.id !== account.uuid || store.get().account?.uuid !== account.uuid) {
+    throw new Error('The signed in Minecraft account changed.');
+  }
+  Object.assign(session.profile, updated);
+  return updated;
+}
+
+module.exports = { microsoft, offline, logout, authorization, minecraftProfile, equipCape, status: pub };

@@ -160,11 +160,12 @@ public final class QuartzMotion {
                 float spread = blend(.54f, .30f, reach);
                 turn(p.rightArm, arm, -.13f, spread, mix);
                 turn(p.leftArm, arm, .13f, -spread, mix);
-                turn(p.rightLeg, -.14f - .18f * reach, -.12f, .15f, mix);
-                turn(p.leftLeg, -.14f - .18f * reach, .12f, -.15f, mix);
-                turn(p.body, .08f + .22f * reach, 0f, 0f, mix);
-                turn(p.head, .12f + .24f * reach, 0f, 0f, mix);
-                p.root().y += .9f * reach * mix;
+                float stride = (float) Math.sin(seconds * 11.5f);
+                turn(p.rightLeg, -.12f + .96f * stride, -.04f, .07f, mix);
+                turn(p.leftLeg, -.12f - .96f * stride, .04f, -.07f, mix);
+                turn(p.body, .16f + .16f * reach, 0f, .04f * stride, mix);
+                turn(p.head, .12f + .18f * reach, 0f, 0f, mix);
+                p.root().y -= 1.6f * stride * stride * mix;
             }
             case "six_seven" -> {
                 float shift = (float) Math.sin(seconds * 8.2f);

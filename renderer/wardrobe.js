@@ -20,7 +20,7 @@ function bindWardrobe() {
   if (!panel || !tabs) return;
   const account = state.account;
   const active = () => panel.isConnected && state.account?.uuid === account.uuid;
-  let skins, capes, style, busy = false, request = 0;
+  let skins, capes, style, previewId, currentTexture, busy = false, request = 0;
 
   function paintTabs() {
     tabs.innerHTML = Object.entries(wardrobeTabs).map(([key, title]) =>
@@ -50,11 +50,12 @@ function bindWardrobe() {
             const ang = Math.PI * i / 4;
             return `<label class="wardrobe-wheel-slot" style="--dx:${Math.sin(ang)};--dy:${-Math.cos(ang)}">
               <span>${i + 1} · ${esc(here ? wardrobeCopy(here.en, here.pl) : wardrobeCopy('Empty', 'Puste'))}</span>
-              <select data-emote-slot="${i}" ${busy ? 'disabled' : ''} aria-label="${wardrobeCopy('Emote slot', 'Slot emotki')} ${i + 1}">
+              <select id="wardrobe-emote-${i}" data-emote-slot="${i}" ${busy ? 'disabled' : ''} aria-label="${wardrobeCopy('Emote slot', 'Slot emotki')} ${i + 1}">
                 <option value="">${wardrobeCopy('Empty', 'Puste')}</option>
                 ${style.emotes.map(emote => `<option value="${esc(emote.id)}" ${emote.id === id ? 'selected' : ''}>${esc(wardrobeCopy(emote.en, emote.pl))}</option>`).join('')}
               </select></label>`;
           }).join('')}<span class="wardrobe-wheel-title">Quartz <kbd>P</kbd></span></div>`;
+        for (const choice of panel.querySelectorAll('[data-emote-slot]')) addQuartzPicker(choice);
       }
       return;
     }
@@ -64,33 +65,51 @@ function bindWardrobe() {
         return;
       }
       if (!capes) { panel.textContent = wardrobeCopy('Loading capes…', 'Wczytywanie peleryn…'); return; }
-      panel.innerHTML = capes.length ? `<div class="wardrobe-grid">${capes.map(cape =>
-        `<article class="wardrobe-item${cape.active ? ' equipped' : ''}">
-        ${cape.url ? `<img src="${esc(cape.url)}" alt="">` : icon('sparkle', 28)}
-        <strong>${esc(cape.name)}</strong>${cape.active ? `<small>${wardrobeCopy('Active on account', 'Aktywna na koncie')}</small>` : ''}</article>`
-      ).join('')}</div>` : `<p class="wardrobe-empty">${wardrobeCopy('Your Minecraft account has no capes.', 'Twoje konto Minecraft nie ma peleryn.')}</p>`;
+      paintCollection(capes.map((cape, index) => ({ ...cape, previewOnly: !cape.id, id: cape.id || 'cache-' + index })), true);
       return;
     }
-    if (!skins) { panel.textContent = wardrobeCopy('Loading skins…', 'Wczytywanie skinów…'); return; }
+    if (!skins) { panel.textContent = wardrobeCopy('Loading skins…', 'Wczytuję skiny…'); return; }
+    paintCollection(skins.skins, false);
+  }
+
+  function paintCollection(items, isCape) {
+    const selected = items.find(item => item.id === previewId);
+    const worn = (item) => isCape ? item.active : item.id === skins.equipped.skin;
     const disabled = busy ? 'disabled' : '';
-    panel.innerHTML = `<div class="wardrobe-tools">
-      <button class="btn primary" data-wardrobe-action="add" ${disabled}>${wardrobeCopy('Add skin', 'Dodaj skina')}</button>
-      <label>${wardrobeCopy('Model for new skin', 'Model nowego skina')}
+    const heading = isCape ? '' : `<div class="wardrobe-tools">
+      <button class="btn primary" data-wardrobe-action="add" ${disabled}>${wardrobeCopy('Add skins', 'Dodaj skiny')}</button>
+      <label>${wardrobeCopy('Model for new skins', 'Model dodawanych skinów')}
         <select id="wardrobe-model"><option value="wide">Classic</option><option value="slim">Slim</option></select>
       </label>
       ${skins.equipped.skin !== 'account' ? `<button class="btn" data-wardrobe-action="reset" ${disabled}>${wardrobeCopy('Use account skin', 'Użyj skina konta')}</button>` : ''}
-    </div>
-    ${skins.skins.length ? `<div class="wardrobe-grid">${skins.skins.map(skin => {
-      const on = skin.id === skins.equipped.skin;
-      return `<article class="wardrobe-item${on ? ' equipped' : ''}">
-        ${skin.preview ? `<img src="${esc(skin.preview)}" alt="">` : icon('user', 28)}
-        <strong>${esc(skin.name)}</strong><small>${skin.slim ? 'Slim' : 'Classic'}</small>
-        <div class="wardrobe-item-actions">
-          <button class="btn" data-wardrobe-action="equip" data-skin="${esc(skin.id)}" ${busy || on ? 'disabled' : ''}>${on ? wardrobeCopy('Equipped', 'Założony') : wardrobeCopy('Equip', 'Załóż')}</button>
-          <button class="btn danger" data-wardrobe-action="remove" data-skin="${esc(skin.id)}" ${disabled}>${wardrobeCopy('Remove', 'Usuń')}</button>
-        </div>
-      </article>`;
-    }).join('')}</div>` : `<p class="wardrobe-empty">${wardrobeCopy('Add a 64 × 64 PNG to start your skin collection.', 'Dodaj PNG 64 × 64, aby zacząć kolekcję skinów.')}</p>`}`;
+    </div>`;
+    const shelf = items.length ? `<div class="wardrobe-grid wardrobe-model-grid">${items.map(item =>
+      `<button type="button" class="wardrobe-item wardrobe-model-card ${worn(item) ? 'equipped' : ''}"
+          data-wardrobe-preview="${esc(item.id)}" aria-pressed="${item === selected}">
+        <canvas width="128" height="118" data-model="${esc(item.id)}" aria-hidden="true"></canvas>
+        <strong>${esc(item.name)}</strong>
+        <small>${worn(item) ? wardrobeCopy('Equipped', 'Założony') : (isCape ? '' : item.slim ? 'Slim' : 'Classic')}</small></button>`).join('')}</div>`
+      : `<p class="wardrobe-empty">${isCape
+          ? wardrobeCopy('Your Minecraft account has no capes.', 'Twoje konto Minecraft nie ma peleryn.')
+          : wardrobeCopy('Add Minecraft skin PNGs to start your collection.', 'Dodaj skiny Minecraft w PNG, aby zacząć kolekcję.')}</p>`;
+    const detail = selected ? `<aside class="wardrobe-preview-detail" aria-label="${wardrobeCopy('3D preview', 'Podgląd 3D')}">
+      <h2>${esc(selected.name)}</h2>
+      <canvas width="220" height="190" data-model="${esc(selected.id)}" class="interactive-model"
+          aria-label="${wardrobeCopy('Drag or use the arrow keys to rotate', 'Przeciągnij lub użyj strzałek, aby obrócić')}"></canvas>
+      <small>${wardrobeCopy('Drag to rotate', 'Przeciągnij, aby obrócić')}</small>
+      <div class="wardrobe-item-actions">
+        <button class="btn primary" data-wardrobe-action="${isCape ? 'cape' : 'equip'}" data-skin="${esc(selected.id)}"
+          ${busy || worn(selected) || selected.previewOnly ? 'disabled' : ''}>${worn(selected) ? wardrobeCopy('Equipped', 'Założony') : wardrobeCopy('Equip', 'Załóż')}</button>
+        ${isCape ? '' : `<button class="btn danger" data-wardrobe-action="remove" data-skin="${esc(selected.id)}" ${disabled}>${wardrobeCopy('Remove', 'Usuń')}</button>`}
+      </div></aside>` : '';
+    panel.innerHTML = heading + `<div class="wardrobe-collection ${selected ? 'with-preview' : ''}">${shelf}${detail}</div>`;
+    const picker = $('#wardrobe-model', panel);
+    if (picker) addQuartzPicker(picker);
+    for (const canvas of panel.querySelectorAll('[data-model]')) {
+      const item = items.find(entry => entry.id === canvas.dataset.model);
+      bindSkinPreview(canvas, isCape ? currentTexture : item.preview, isCape ? item.url : null,
+        Boolean(item.slim), canvas.classList.contains('interactive-model'));
+    }
   }
 
   async function refresh() {
@@ -105,8 +124,8 @@ function bindWardrobe() {
         const response = await api('cosmetics:get');
         if (id === request) skins = response;
       } else if (tab === 'capes' && account.type === 'microsoft' && !capes) {
-        const response = await api('cosmetics:capes');
-        if (id === request) capes = response;
+        const [response, texture] = await Promise.all([api('cosmetics:capes'), api('cosmetics:active-head').catch(() => null)]);
+        if (id === request) { capes = response; currentTexture = texture; }
       }
       if (id === request) paint();
     } catch (error) { if (id === request && active()) panel.textContent = error.message; }
@@ -114,7 +133,7 @@ function bindWardrobe() {
 
   tabs.addEventListener('click', event => {
     const next = event.target.closest('[data-wardrobe-tab]')?.dataset.wardrobeTab;
-    if (next && next !== wardrobeTab) { wardrobeTab = next; refresh(); }
+    if (next && next !== wardrobeTab) { wardrobeTab = next; previewId = undefined; refresh(); }
   });
   panel.addEventListener('change', async event => {
     const select = event.target.closest('[data-emote-slot]');
@@ -125,6 +144,13 @@ function bindWardrobe() {
     finally { busy = false; if (active()) paint(); }
   });
   panel.addEventListener('click', async event => {
+    const preview = event.target.closest('[data-wardrobe-preview]');
+    if (preview && !busy && active()) {
+      previewId = preview.dataset.wardrobePreview;
+      paint();
+      $('#wardrobe-content .interactive-model')?.focus();
+      return;
+    }
     const button = event.target.closest('[data-wardrobe-action]');
     if (!button || busy || !active()) return;
     const { wardrobeAction, skin } = button.dataset;
@@ -137,10 +163,17 @@ function bindWardrobe() {
     paint();
     try {
       if (wardrobeAction === 'model') style = await api('cosmetics:equip-model', skin);
-      if (wardrobeAction === 'add') await api('cosmetics:add-skin', slim);
+      if (wardrobeAction === 'add') {
+        const result = await api('cosmetics:add-skin', slim);
+        if (result?.ids.length) previewId = result.ids.at(-1);
+        if (result?.failed) toast(wardrobeCopy(`Some skins could not be added (${result.failed}).`,
+          `Nie udało się dodać części skinów (${result.failed}).`), true);
+      }
+      if (wardrobeAction === 'cape') capes = await api('cosmetics:equip-cape', skin);
       if (wardrobeAction === 'equip') await api('cosmetics:equip-skin', skin);
       if (wardrobeAction === 'reset') await api('cosmetics:equip-skin', 'account');
       if (wardrobeAction === 'remove') await api('cosmetics:remove-skin', skin);
+      if (['equip', 'reset', 'remove'].includes(wardrobeAction)) { capes = null; void updateAccountHead(); }
     } catch (error) { if (active()) toast(error.message, true); }
     finally { busy = false; if (active()) refresh(); }
   });

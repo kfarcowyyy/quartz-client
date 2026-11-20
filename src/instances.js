@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const paths = require('./paths');
+const versions = require('./versions');
 
 function file(id) {
   return path.join(paths.instDir(id), 'instance.json');
@@ -24,11 +25,12 @@ function get(id) {
   }
 }
 
-function create({ name, mcVersion, loader = 'vanilla' }) {
+async function create({ name, mcVersion, loader = 'vanilla' }) {
   if (!name || !mcVersion) throw new Error('Podaj nazwę i wersję');
   if (!['vanilla', 'fabric', 'quilt'].includes(loader)) {
     throw new Error('Ten loader dojdzie w etapie 2 (Forge/NeoForge)');
   }
+  await versions.assertCreatable(mcVersion);
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'instancja';
   const id = `${slug}-${Date.now().toString(36)}`;
   const inst = { id, name, mcVersion, loader, created: Date.now() };

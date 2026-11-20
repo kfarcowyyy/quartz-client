@@ -6,6 +6,7 @@
     'Usunąć plik?': 'Remove file?', 'Plik zostanie usunięty z instancji.': 'The file will be removed from the instance.',
     'Usunąć skina?': 'Remove skin?', 'Skin zostanie usunięty z garderoby.': 'The skin will be removed from your wardrobe.',
     Anuluj: 'Cancel',
+    'Wybierz opublikowaną wersję Minecrafta od 1.15 do 1.21.x lub 26.x.': 'Choose a released Minecraft version from 1.15 through 1.21.x or 26.x.',
     Graj: 'Play', Instancje: 'Instances', Przeglądaj: 'Browse', Konto: 'Account', Ustawienia: 'Settings',
     Niezalogowano: 'Not signed in', 'Wejdź w zakładkę Konto': 'Open the Account tab',
     'Gotowy do gry?': 'Ready to play?', 'Wybierz instancję i uruchom. Wszystko pobierze się samo.': 'Choose an instance and launch. The required files download automatically.',

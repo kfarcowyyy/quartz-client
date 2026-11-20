@@ -3,12 +3,17 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const paths = require('./paths');
 
-function install(instance) {
-  if (!['fabric', 'quilt'].includes(instance.loader)) return false;
-  if (!/^(?:1\.(?:\d+)(?:\.\d+)?|26\.\d+(?:\.\d+)?)$/.test(instance.mcVersion)) return false;
-  const root = path.join(__dirname, '..', 'quartz-mods', instance.loader, instance.mcVersion);
+function bundledFiles({ loader, mcVersion }) {
+  if (!['fabric', 'quilt'].includes(loader)) return false;
+  if (!/^(?:1\.(?:1[5-9]|2[01])(?:\.\d+)?|26\.\d+(?:\.\d+)?)$/.test(mcVersion)) return false;
+  const root = path.join(__dirname, '..', 'quartz-mods', loader, mcVersion);
   const sources = ['quartz-client.jar', 'fabric-api.jar'].map((name) => path.join(root, name));
-  if (!sources.every((file) => fs.existsSync(file))) return false;
+  return sources.every(file => fs.existsSync(file)) ? sources : null;
+}
+
+function install(instance) {
+  const sources = bundledFiles(instance);
+  if (!sources) return false;
   const folder = path.join(paths.instDir(instance.id), 'mods');
   fs.mkdirSync(folder, { recursive: true });
   for (const [index, source] of sources.entries()) {

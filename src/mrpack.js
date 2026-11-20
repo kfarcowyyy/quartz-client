@@ -26,7 +26,7 @@ async function importMrpack(file, onStatus, opts = {}) {
   if ((opts.mcVersion && deps.minecraft !== opts.mcVersion) || (opts.loader && loader !== opts.loader)) {
     throw new Error('Pobrany modpack nie pasuje do wybranych filtrów.');
   }
-  const inst = instances.create({ name: index.name || 'Modpack', mcVersion: deps.minecraft, loader });
+  const inst = await instances.create({ name: index.name || 'Modpack', mcVersion: deps.minecraft, loader });
   const dir = paths.instDir(inst.id);
 
   const files = (index.files || []).filter((f) => !f.env || f.env.client !== 'unsupported');
